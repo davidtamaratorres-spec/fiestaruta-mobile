@@ -1,20 +1,34 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Dish } from "../models/Dish";
 import { Restaurant } from "../models/Restaurant";
+import { User } from "../models/User";
 
 const STORAGE_KEY = "partner_data";
 
 type PartnerData = {
+  users: User[];
   restaurants: Restaurant[];
   dishes: Dish[];
 };
 
 export async function loadPartnerData(): Promise<PartnerData> {
   const raw = await AsyncStorage.getItem(STORAGE_KEY);
+
   if (!raw) {
-    return { restaurants: [], dishes: [] };
+    return {
+      users: [],
+      restaurants: [],
+      dishes: [],
+    };
   }
-  return JSON.parse(raw);
+
+  const parsed = JSON.parse(raw);
+
+  return {
+    users: parsed.users ?? [],
+    restaurants: parsed.restaurants ?? [],
+    dishes: parsed.dishes ?? [],
+  };
 }
 
 export async function savePartnerData(data: PartnerData) {
@@ -23,7 +37,7 @@ export async function savePartnerData(data: PartnerData) {
 
 export async function saveRestaurant(restaurant: Restaurant) {
   const data = await loadPartnerData();
-  const existing = data.restaurants.find(r => r.id === restaurant.id);
+  const existing = data.restaurants.find((r) => r.id === restaurant.id);
 
   if (existing) {
     Object.assign(existing, restaurant);
@@ -44,11 +58,12 @@ export async function getPublicDishes() {
   const data = await loadPartnerData();
 
   const restaurantMap = Object.fromEntries(
-    data.restaurants.map(r => [r.id, r])
+    data.restaurants.map((r) => [r.id, r])
   );
 
-  return data.dishes.map(d => {
+  return data.dishes.map((d) => {
     const r = restaurantMap[d.restaurantId];
+
     return {
       ...d,
       restaurantName: r?.name ?? "",
@@ -58,4 +73,3 @@ export async function getPublicDishes() {
     };
   });
 }
-

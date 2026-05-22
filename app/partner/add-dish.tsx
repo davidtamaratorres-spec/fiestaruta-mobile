@@ -1,6 +1,6 @@
 import * as Crypto from "expo-crypto";
 import * as ImagePicker from "expo-image-picker";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import {
   Alert,
@@ -19,10 +19,12 @@ import {
 
 import { createBackendDish } from "../services/backendDishes";
 import { Dish } from "./models/Dish";
+import { authService } from "./services/AuthService";
 import { addDish, loadPartnerData } from "./storage/partnerStorage";
 
 export default function AddDishScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
 
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
@@ -35,8 +37,9 @@ export default function AddDishScreen() {
     Keyboard.dismiss();
 
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
     if (!permission.granted) {
-      Alert.alert("Permiso requerido para acceder a fotos");
+      Alert.alert("Permiso requerido", "Se necesita permiso para acceder a tus fotos.");
       return;
     }
 
@@ -52,59 +55,83 @@ export default function AddDishScreen() {
 
   async function handleSave() {
     Keyboard.dismiss();
+
     if (saving) return;
 
     if (!name.trim() || !price.trim()) {
-      Alert.alert("Nombre y precio son obligatorios");
+      Alert.alert("Datos incompletos", "Nombre y precio son obligatorios.");
       return;
     }
 
     const precioNum = Number(price);
+
     if (Number.isNaN(precioNum) || precioNum < 0) {
-      Alert.alert("Precio inválido");
+      Alert.alert("Precio inválido", "Ingresa un precio numérico válido.");
       return;
     }
 
     setSaving(true);
 
     try {
-      const data = await loadPartnerData();
-      const restaurant = data?.restaurants?.[0];
+      const currentUser = await authService.getCurrentUser();
 
-      if (!restaurant) {
-        Alert.alert("No hay restaurante registrado");
+      if (!currentUser) {
+        Alert.alert("Sesión requerida", "Debes iniciar sesión para agregar platos.");
+        router.replace("/partner/auth");
         return;
       }
 
-      // Por ahora: si tu restaurant.id no es numérico, hacemos fallback a 1.
-      const idCandidate = Number((restaurant as any).id);
-      const restaurante_id = Number.isFinite(idCandidate) ? idCandidate : 1;
+      const data = await loadPartnerData();
 
-      // 1) Fuente de verdad: backend
-      const result = await createBackendDish({
-        restaurante_id,
-        nombre: name.trim(),
-        descripcion: description.trim(),
-        precio: precioNum,
-        categoria: "Test",
-        imagen_url: "",
-        disponible: available ? 1 : 0,
-      });
+      const restaurantIdFromParams =
+        typeof params.restaurantId === "string" ? params.restaurantId : "";
 
-      // 2) Cache local (opcional)
+      const restaurant =
+        data.restaurants.find(
+          (r) => r.id === restaurantIdFromParams && r.userId === currentUser.id
+        ) ??
+        data.restaurants.find((r) => r.userId === currentUser.id);
+
+      if (!restaurant) {
+        Alert.alert(
+          "No hay restaurante",
+          "Primero registra tu restaurante antes de agregar platos."
+        );
+        router.replace("/partner/home");
+        return;
+      }
+
       const newDish: Dish = {
         id: Crypto.randomUUID(),
-        restaurantId: (restaurant as any).id,
+        restaurantId: restaurant.id,
         name: name.trim(),
         price: precioNum,
         description: description.trim(),
         available,
         imageUri: imageUri || undefined,
       };
+
       await addDish(newDish);
 
-      Alert.alert("Éxito", `Plato agregado (backend id: ${result.id ?? "?"})`, [
-        { text: "OK", onPress: () => router.back() },
+      const idCandidate = Number((restaurant as any).id);
+
+      if (Number.isFinite(idCandidate)) {
+        await createBackendDish({
+          restaurante_id: idCandidate,
+          nombre: name.trim(),
+          descripcion: description.trim(),
+          precio: precioNum,
+          categoria: "General",
+          imagen_url: "",
+          disponible: available ? 1 : 0,
+        });
+      }
+
+      Alert.alert("Plato guardado", "El plato quedó asociado a tu restaurante.", [
+        {
+          text: "OK",
+          onPress: () => router.replace("/partner/home"),
+        },
       ]);
     } catch (e: any) {
       Alert.alert("Error", e?.message ?? String(e));
@@ -118,7 +145,10 @@ export default function AddDishScreen() {
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+      >
         <Text style={styles.title}>Agregar plato</Text>
 
         <TextInput
@@ -166,7 +196,9 @@ export default function AddDishScreen() {
           onPress={handleSave}
           disabled={saving}
         >
-          <Text style={styles.buttonText}>{saving ? "Guardando..." : "Guardar plato"}</Text>
+          <Text style={styles.buttonText}>
+            {saving ? "Guardando..." : "Guardar plato"}
+          </Text>
         </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -174,16 +206,57 @@ export default function AddDishScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 24 },
-  title: { fontSize: 22, fontWeight: "600", marginBottom: 16 },
-  input: { borderWidth: 1, borderColor: "#ddd", borderRadius: 8, padding: 12, marginBottom: 12 },
-  textarea: { height: 80 },
-  switchRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 16 },
-  imagePicker: { backgroundColor: "#eee", padding: 14, borderRadius: 8, alignItems: "center", marginBottom: 12 },
-  imagePickerText: { fontWeight: "600" },
-  preview: { width: "100%", height: 180, borderRadius: 10, marginBottom: 16 },
-  button: { backgroundColor: "#FF6A00", padding: 16, borderRadius: 10, alignItems: "center", marginBottom: 30 },
-  buttonDisabled: { opacity: 0.5 },
-  buttonText: { color: "#fff", fontWeight: "600" },
+  container: {
+    padding: 24,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: "600",
+    marginBottom: 16,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+  },
+  textarea: {
+    height: 80,
+  },
+  switchRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 16,
+  },
+  imagePicker: {
+    backgroundColor: "#eee",
+    padding: 14,
+    borderRadius: 8,
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  imagePickerText: {
+    fontWeight: "600",
+  },
+  preview: {
+    width: "100%",
+    height: 180,
+    borderRadius: 10,
+    marginBottom: 16,
+  },
+  button: {
+    backgroundColor: "#FF6A00",
+    padding: 16,
+    borderRadius: 10,
+    alignItems: "center",
+    marginBottom: 30,
+  },
+  buttonDisabled: {
+    opacity: 0.5,
+  },
+  buttonText: {
+    color: "#fff",
+    fontWeight: "600",
+  },
 });
-

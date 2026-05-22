@@ -1,6 +1,6 @@
 // app/services/api.ts
 
-export const API_URL = "https://dishquest-backend.onrender.com";
+export const API_URL = "http://192.168.1.5:3000/api";
 
 export async function apiFetch<T>(endpoint: string): Promise<T> {
   const url = `${API_URL}${endpoint}`;
