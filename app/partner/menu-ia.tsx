@@ -1,11 +1,13 @@
 import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Image,
+  LayoutChangeEvent,
+  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -41,6 +43,13 @@ type SelectedImage = {
 type SourceMode = "image" | "text" | "url";
 type ImageSource = "camera" | "gallery";
 
+type Rect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 const SAVE_OPTIONS = {
   compress: 0.82,
   format: ImageManipulator.SaveFormat.JPEG,
@@ -52,14 +61,103 @@ export default function MenuIaScreen() {
   const [sourceMode, setSourceMode] = useState<SourceMode>("image");
   const [lastImageSource, setLastImageSource] = useState<ImageSource>("camera");
   const [image, setImage] = useState<SelectedImage | null>(null);
+  const [previewSize, setPreviewSize] = useState({ width: 0, height: 420 });
+  const [cropMode, setCropMode] = useState(false);
+  const [cropRect, setCropRect] = useState<Rect | null>(null);
   const [menuText, setMenuText] = useState("");
   const [menuUrl, setMenuUrl] = useState("");
   const [platos, setPlatos] = useState<ExtractedDish[]>([]);
   const [extracting, setExtracting] = useState(false);
   const [saving, setSaving] = useState(false);
+  const cropStartRef = useRef<{ rect: Rect; mode: "move" | "resize" } | null>(null);
+
+  const displayedImageRect = useMemo(() => {
+    if (!image || previewSize.width <= 0 || previewSize.height <= 0) {
+      return { x: 0, y: 0, width: 0, height: 0, scale: 1 };
+    }
+    const scale = Math.min(previewSize.width / image.width, previewSize.height / image.height);
+    const width = image.width * scale;
+    const height = image.height * scale;
+    return {
+      x: (previewSize.width - width) / 2,
+      y: (previewSize.height - height) / 2,
+      width,
+      height,
+      scale,
+    };
+  }, [image, previewSize.height, previewSize.width]);
+
+  const clampCropRect = useCallback((start: Rect, dx: number, dy: number, mode: "move" | "resize") => {
+    const frame = displayedImageRect;
+    const minSize = 72;
+
+    if (mode === "resize") {
+      const maxWidth = frame.x + frame.width - start.x;
+      const maxHeight = frame.y + frame.height - start.y;
+      return {
+        ...start,
+        width: Math.max(minSize, Math.min(maxWidth, start.width + dx)),
+        height: Math.max(minSize, Math.min(maxHeight, start.height + dy)),
+      };
+    }
+
+    return {
+      ...start,
+      x: Math.max(frame.x, Math.min(frame.x + frame.width - start.width, start.x + dx)),
+      y: Math.max(frame.y, Math.min(frame.y + frame.height - start.height, start.y + dy)),
+    };
+  }, [displayedImageRect]);
+
+  const cropResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => cropMode,
+        onMoveShouldSetPanResponder: () => cropMode,
+        onPanResponderGrant: (evt) => {
+          if (!cropRect) return;
+          const touchX = evt.nativeEvent.locationX;
+          const touchY = evt.nativeEvent.locationY;
+          const nearRight = touchX > cropRect.width - 48;
+          const nearBottom = touchY > cropRect.height - 48;
+          cropStartRef.current = {
+            rect: cropRect,
+            mode: nearRight && nearBottom ? "resize" : "move",
+          };
+        },
+        onPanResponderMove: (_evt, gesture) => {
+          const start = cropStartRef.current;
+          if (!start) return;
+          setCropRect(clampCropRect(start.rect, gesture.dx, gesture.dy, start.mode));
+        },
+        onPanResponderRelease: () => {
+          cropStartRef.current = null;
+        },
+        onPanResponderTerminate: () => {
+          cropStartRef.current = null;
+        },
+      }),
+    [clampCropRect, cropMode, cropRect]
+  );
 
   function resetResult() {
     setPlatos([]);
+  }
+
+  function onPreviewLayout(event: LayoutChangeEvent) {
+    const { width, height } = event.nativeEvent.layout;
+    setPreviewSize({ width, height });
+  }
+
+  function getDefaultCropRect() {
+    const frame = displayedImageRect;
+    const width = frame.width * 0.82;
+    const height = frame.height * 0.72;
+    return {
+      x: frame.x + (frame.width - width) / 2,
+      y: frame.y + (frame.height - height) / 2,
+      width,
+      height,
+    };
   }
 
   function normalizeDishes(data: MenuIaResponse) {
@@ -116,19 +214,34 @@ export default function MenuIaScreen() {
   }
 
   async function cropImage() {
-    if (!image) return;
-    const insetX = Math.round(image.width * 0.06);
-    const insetY = Math.round(image.height * 0.08);
-    const cropWidth = Math.max(1, image.width - insetX * 2);
-    const cropHeight = Math.max(1, image.height - insetY * 2);
+    if (!image || displayedImageRect.width <= 0) return;
+    setCropRect(getDefaultCropRect());
+    setCropMode(true);
+  }
+
+  async function applyCrop() {
+    if (!image || !cropRect || displayedImageRect.width <= 0) return;
+    const originX = Math.round((cropRect.x - displayedImageRect.x) / displayedImageRect.scale);
+    const originY = Math.round((cropRect.y - displayedImageRect.y) / displayedImageRect.scale);
+    const cropWidth = Math.round(cropRect.width / displayedImageRect.scale);
+    const cropHeight = Math.round(cropRect.height / displayedImageRect.scale);
 
     try {
       const result = await ImageManipulator.manipulateAsync(
         image.uri,
-        [{ crop: { originX: insetX, originY: insetY, width: cropWidth, height: cropHeight } }],
+        [{
+          crop: {
+            originX: Math.max(0, originX),
+            originY: Math.max(0, originY),
+            width: Math.max(1, Math.min(image.width - originX, cropWidth)),
+            height: Math.max(1, Math.min(image.height - originY, cropHeight)),
+          },
+        }],
         SAVE_OPTIONS
       );
       setImage({ uri: result.uri, width: result.width, height: result.height, mediaType: "image/jpeg" });
+      setCropMode(false);
+      setCropRect(null);
       resetResult();
     } catch (e: any) {
       Alert.alert("Error", e?.message ?? "No se pudo recortar la imagen.");
@@ -140,6 +253,8 @@ export default function MenuIaScreen() {
     try {
       const result = await ImageManipulator.manipulateAsync(image.uri, [{ rotate: 90 }], SAVE_OPTIONS);
       setImage({ uri: result.uri, width: result.width, height: result.height, mediaType: "image/jpeg" });
+      setCropMode(false);
+      setCropRect(null);
       resetResult();
     } catch (e: any) {
       Alert.alert("Error", e?.message ?? "No se pudo rotar la imagen.");
@@ -290,7 +405,60 @@ export default function MenuIaScreen() {
       {sourceMode === "image" && image ? (
         <View style={styles.imageEditor}>
           <Text style={styles.editorTitle}>Edita la imagen antes de enviarla</Text>
-          <Image source={{ uri: image.uri }} style={styles.largePreview} resizeMode="contain" />
+          <View style={styles.previewBox} onLayout={onPreviewLayout}>
+            <Image source={{ uri: image.uri }} style={styles.largePreview} resizeMode="contain" />
+            {cropMode && cropRect ? (
+              <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+                <View style={[styles.cropShade, { top: 0, left: 0, right: 0, height: cropRect.y }]} />
+                <View style={[styles.cropShade, { top: cropRect.y + cropRect.height, left: 0, right: 0, bottom: 0 }]} />
+                <View style={[styles.cropShade, { top: cropRect.y, left: 0, width: cropRect.x, height: cropRect.height }]} />
+                <View
+                  style={[
+                    styles.cropShade,
+                    {
+                      top: cropRect.y,
+                      left: cropRect.x + cropRect.width,
+                      right: 0,
+                      height: cropRect.height,
+                    },
+                  ]}
+                />
+              </View>
+            ) : null}
+            {cropMode && cropRect ? (
+              <View
+                {...cropResponder.panHandlers}
+                style={[
+                  styles.cropRect,
+                  {
+                    left: cropRect.x,
+                    top: cropRect.y,
+                    width: cropRect.width,
+                    height: cropRect.height,
+                  },
+                ]}
+              >
+                <View style={styles.resizeHandle} />
+              </View>
+            ) : null}
+          </View>
+          {cropMode ? (
+            <View style={styles.cropActions}>
+              <Pressable style={styles.confirmButton} onPress={applyCrop} disabled={extracting}>
+                <Text style={styles.buttonText}>Aplicar recorte</Text>
+              </Pressable>
+              <Pressable
+                style={styles.secondaryButton}
+                onPress={() => {
+                  setCropMode(false);
+                  setCropRect(null);
+                }}
+                disabled={extracting}
+              >
+                <Text style={styles.secondaryText}>Cancelar recorte</Text>
+              </Pressable>
+            </View>
+          ) : null}
           <View style={styles.toolRow}>
             <Pressable style={styles.toolButton} onPress={cropImage} disabled={extracting}>
               <Text style={styles.toolText}>✂️ Recortar</Text>
@@ -415,7 +583,27 @@ const styles = StyleSheet.create({
   editor: { gap: 12, marginBottom: 18 },
   imageEditor: { gap: 12, marginBottom: 18 },
   editorTitle: { fontSize: 16, fontWeight: "800", color: "#111" },
-  largePreview: { width: "100%", height: 420, borderRadius: 10, backgroundColor: "#111" },
+  previewBox: { width: "100%", height: 420, borderRadius: 10, backgroundColor: "#111", overflow: "hidden" },
+  largePreview: { width: "100%", height: "100%" },
+  cropShade: { position: "absolute", backgroundColor: "rgba(0,0,0,0.45)" },
+  cropRect: {
+    position: "absolute",
+    borderWidth: 3,
+    borderColor: "#FF6A00",
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  resizeHandle: {
+    position: "absolute",
+    right: -2,
+    bottom: -2,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "#FF6A00",
+    borderWidth: 3,
+    borderColor: "#fff",
+  },
+  cropActions: { gap: 10 },
   toolRow: { flexDirection: "row", gap: 10 },
   toolButton: {
     flex: 1,
