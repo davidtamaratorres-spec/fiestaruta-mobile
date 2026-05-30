@@ -1,79 +1,60 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { BASE_URL } from '../../services/backendApi';
 
-import { User } from "../models/User";
-import { loadPartnerData, savePartnerData } from "../storage/partnerStorage";
-import { generateId } from "./id";
+export const authService = {
+  async register(
+    email: string,
+    password: string,
+    nombre_restaurante: string,
+    ciudad: string,
+    whatsapp: string
+  ): Promise<void> {
+    const res = await fetch(`${BASE_URL}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, nombre_restaurante, ciudad, whatsapp }),
+    });
 
-const CURRENT_USER_KEY = "partner_current_user";
+    const data = await res.json();
 
-class AuthService {
-  async register(email: string, password: string): Promise<User> {
-    const cleanEmail = email.trim().toLowerCase();
-    const cleanPassword = password.trim();
-
-    if (!cleanEmail || !cleanPassword) {
-      throw new Error("Correo y contraseña son obligatorios");
+    if (!res.ok) {
+      throw new Error(data.error || 'Error al registrarse');
     }
 
-    if (cleanPassword.length < 4) {
-      throw new Error("La contraseña debe tener mínimo 4 caracteres");
+    await AsyncStorage.setItem('partner_token', data.token);
+    await AsyncStorage.setItem('partner_restaurante_id', String(data.restaurante_id));
+  },
+
+  async login(email: string, password: string): Promise<boolean> {
+    const res = await fetch(`${BASE_URL}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Credenciales inválidas');
     }
 
-    const data = await loadPartnerData();
+    await AsyncStorage.setItem('partner_token', data.token);
+    await AsyncStorage.setItem('partner_restaurante_id', String(data.restaurante_id));
 
-    const existingUser = data.users.find((u) => u.email === cleanEmail);
-
-    if (existingUser) {
-      throw new Error("Ya existe un usuario registrado con ese correo");
-    }
-
-    const user: User = {
-      id: generateId(),
-      email: cleanEmail,
-      password: cleanPassword,
-      role: "partner",
-      createdAt: new Date().toISOString(),
-    };
-
-    data.users.push(user);
-    await savePartnerData(data);
-    await AsyncStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
-
-    return user;
-  }
-
-  async login(email: string, password: string): Promise<User | null> {
-    const cleanEmail = email.trim().toLowerCase();
-    const cleanPassword = password.trim();
-
-    const data = await loadPartnerData();
-
-    const user = data.users.find(
-      (u) => u.email === cleanEmail && u.password === cleanPassword
-    );
-
-    if (!user) {
-      return null;
-    }
-
-    await AsyncStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
-
-    return user;
-  }
-
-  async getCurrentUser(): Promise<User | null> {
-    const raw = await AsyncStorage.getItem(CURRENT_USER_KEY);
-
-    if (!raw) {
-      return null;
-    }
-
-    return JSON.parse(raw);
-  }
+    return true;
+  },
 
   async logout(): Promise<void> {
-    await AsyncStorage.removeItem(CURRENT_USER_KEY);
-  }
-}
+    await AsyncStorage.removeItem('partner_token');
+    await AsyncStorage.removeItem('partner_restaurante_id');
+  },
 
-export const authService = new AuthService();
+  async getToken(): Promise<string | null> {
+    return AsyncStorage.getItem('partner_token');
+  },
+
+  async isLoggedIn(): Promise<boolean> {
+    const token = await AsyncStorage.getItem('partner_token');
+    return !!token;
+  },
+};
