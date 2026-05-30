@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -12,9 +12,9 @@ import {
   View,
 } from "react-native";
 
-import { backendGet } from "../services/backendApi";
+import { backendGet, backendPost } from "../services/backendApi";
 
-type DishDetail = {
+type DishDetailData = {
   id: number;
   restaurante_id: number;
   nombre: string;
@@ -109,17 +109,29 @@ function pickImage(imageUrl: string | undefined, name: string) {
   return (guessed && DISH_IMAGES[guessed]) ? DISH_IMAGES[guessed] : PLACEHOLDER_IMG;
 }
 
-function openWhatsApp(whatsapp: string, dishName: string) {
+function trackEvento(
+  plato_id: number,
+  restaurante_id: number,
+  tipo_evento: "vista" | "domicilio" | "reserva" | "descuento" | "mapa",
+  ciudad_usuario?: string
+) {
+  backendPost("/eventos", {
+    plato_id,
+    restaurante_id,
+    tipo_evento,
+    ciudad_usuario: ciudad_usuario || null,
+  }).catch(() => {});
+}
+
+function openWhatsApp(whatsapp: string, message: string) {
   const clean = whatsapp.replace(/\D/g, "");
-  const msg = encodeURIComponent(`Hola, me interesa el plato: ${dishName}`);
-  Linking.openURL(`https://wa.me/${clean}?text=${msg}`).catch(() =>
-    Alert.alert("Error", "No se pudo abrir WhatsApp.")
-  );
+  const url = `https://wa.me/${clean}?text=${encodeURIComponent(message)}`;
+  Linking.openURL(url).catch(() => Alert.alert("Error", "No se pudo abrir WhatsApp."));
 }
 
 function openMaps(lat: number | undefined, lon: number | undefined, address: string, city: string) {
   let url: string;
-  if (lat && lon) {
+  if (Number.isFinite(Number(lat)) && Number.isFinite(Number(lon))) {
     url = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
   } else {
     const q = encodeURIComponent(`${address || ""} ${city || ""}`.trim());
@@ -129,11 +141,11 @@ function openMaps(lat: number | undefined, lon: number | undefined, address: str
 }
 
 export default function DishDetail() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, ciudad_usuario } = useLocalSearchParams<{ id: string; ciudad_usuario?: string }>();
   const router = useRouter();
 
   const [loading, setLoading] = useState(true);
-  const [dish, setDish] = useState<DishDetail | null>(null);
+  const [dish, setDish] = useState<DishDetailData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const idNum = useMemo(() => Number(id), [id]);
@@ -145,8 +157,11 @@ export default function DishDetail() {
         setLoading(true);
         setError(null);
         if (!id || Number.isNaN(idNum)) throw new Error("ID inválido");
-        const data = await backendGet<DishDetail>(`/dishes/${idNum}`);
-        if (active) setDish(data);
+        const data = await backendGet<DishDetailData>(`/dishes/${idNum}`);
+        if (!active) return;
+        setDish(data);
+        // Registra evento de vista
+        trackEvento(data.id, data.restaurante_id, "vista", ciudad_usuario || data.ciudad);
       } catch (e: any) {
         if (active) { setDish(null); setError(e?.message || "Error cargando detalle"); }
       } finally {
@@ -155,25 +170,31 @@ export default function DishDetail() {
     }
     load();
     return () => { active = false; };
-  }, [id, idNum]);
+  }, [id, idNum, ciudad_usuario]);
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#FF6A00" />
-        <Text style={styles.muted}>Cargando plato...</Text>
-      </View>
+      <>
+        <Stack.Screen options={{ title: "Cargando..." }} />
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color="#FF6A00" />
+          <Text style={styles.muted}>Cargando plato...</Text>
+        </View>
+      </>
     );
   }
 
   if (error || !dish) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.errorText}>{error || "Plato no encontrado"}</Text>
-        <Pressable style={styles.backBtn} onPress={() => router.back()}>
-          <Text style={styles.backBtnText}>Volver</Text>
-        </Pressable>
-      </View>
+      <>
+        <Stack.Screen options={{ title: "Error" }} />
+        <View style={styles.center}>
+          <Text style={styles.errorText}>{error || "Plato no encontrado"}</Text>
+          <Pressable style={styles.backBtn} onPress={() => router.back()}>
+            <Text style={styles.backBtnText}>Volver</Text>
+          </Pressable>
+        </View>
+      </>
     );
   }
 
@@ -184,92 +205,107 @@ export default function DishDetail() {
     : null;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backRow}>
-        <Text style={styles.backText}>← Volver</Text>
-      </Pressable>
+    <>
+      {/* Título dinámico con el nombre real del plato */}
+      <Stack.Screen options={{ title: dish.nombre }} />
 
-      <Image source={pickImage(dish.imagen_url, dish.nombre)} style={styles.hero} resizeMode="cover" />
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <Image source={pickImage(dish.imagen_url, dish.nombre)} style={styles.hero} resizeMode="cover" />
 
-      {/* Badge descuento */}
-      {tieneDescuento && (
-        <View style={styles.discountBadge}>
-          <Text style={styles.discountBadgeText}>
-            {pct > 0 ? `${pct}% OFF` : "PROMO"}
-          </Text>
-        </View>
-      )}
-
-      <Text style={styles.name}>{dish.nombre}</Text>
-
-      {/* Precio */}
-      <View style={styles.priceRow}>
-        <Text style={styles.price}>${dish.precio.toLocaleString("es-CO")}</Text>
-        {precioOriginal && (
-          <Text style={styles.priceOld}>${precioOriginal.toLocaleString("es-CO")}</Text>
+        {tieneDescuento && (
+          <View style={styles.discountBadge}>
+            <Text style={styles.discountBadgeText}>
+              {pct > 0 ? `${pct}% OFF` : "PROMO"}
+            </Text>
+          </View>
         )}
-      </View>
 
-      {dish.categoria ? <Text style={styles.categoria}>{dish.categoria}</Text> : null}
+        <View style={styles.body}>
+          <Text style={styles.name}>{dish.nombre}</Text>
 
-      {/* Descripción */}
-      {dish.descripcion?.trim() ? (
-        <>
-          <Text style={styles.sectionTitle}>Descripción</Text>
-          <Text style={styles.desc}>{dish.descripcion}</Text>
-        </>
-      ) : null}
+          <View style={styles.priceRow}>
+            <Text style={styles.price}>${dish.precio.toLocaleString("es-CO")}</Text>
+            {precioOriginal && (
+              <Text style={styles.priceOld}>${precioOriginal.toLocaleString("es-CO")}</Text>
+            )}
+          </View>
 
-      {/* Restaurante */}
-      <Text style={styles.sectionTitle}>Restaurante</Text>
-      <Text style={styles.restaurantName}>
-        {dish.restaurante_nombre ?? `Restaurante #${dish.restaurante_id}`}
-      </Text>
-      {dish.ciudad ? <Text style={styles.info}>📍 {dish.ciudad}</Text> : null}
-      {dish.direccion ? <Text style={styles.info}>{dish.direccion}</Text> : null}
-      {dish.whatsapp ? <Text style={styles.info}>📱 {dish.whatsapp}</Text> : null}
-      {dish.restaurante_email ? <Text style={styles.info}>✉️ {dish.restaurante_email}</Text> : null}
+          {dish.categoria ? <Text style={styles.categoria}>{dish.categoria}</Text> : null}
 
-      {/* Botones de acción */}
-      <View style={styles.actionsSection}>
-        {dish.acepta_domicilio ? (
-          <Pressable
-            style={styles.actionBtn}
-            onPress={() => dish.whatsapp
-              ? openWhatsApp(dish.whatsapp, dish.nombre)
-              : Alert.alert("Sin contacto", "Este restaurante no tiene WhatsApp registrado.")
-            }
-          >
-            <Text style={styles.actionBtnText}>🛵 Pedir domicilio</Text>
-          </Pressable>
-        ) : null}
+          {dish.descripcion?.trim() ? (
+            <>
+              <Text style={styles.sectionTitle}>Descripción</Text>
+              <Text style={styles.desc}>{dish.descripcion}</Text>
+            </>
+          ) : null}
 
-        {dish.acepta_reserva ? (
-          <Pressable
-            style={[styles.actionBtn, styles.reservaBtn]}
-            onPress={() => dish.whatsapp
-              ? openWhatsApp(dish.whatsapp, `Reserva: ${dish.nombre}`)
-              : Alert.alert("Sin contacto", "Este restaurante no tiene WhatsApp registrado.")
-            }
-          >
-            <Text style={styles.actionBtnText}>📅 Reservar</Text>
-          </Pressable>
-        ) : null}
+          <Text style={styles.sectionTitle}>Restaurante</Text>
+          <Text style={styles.restaurantName}>
+            {dish.restaurante_nombre ?? `Restaurante #${dish.restaurante_id}`}
+          </Text>
+          {dish.ciudad ? <Text style={styles.info}>📍 {dish.ciudad}</Text> : null}
+          {dish.direccion ? <Text style={styles.info}>{dish.direccion}</Text> : null}
+          {dish.whatsapp ? <Text style={styles.info}>📱 {dish.whatsapp}</Text> : null}
+          {dish.restaurante_email ? <Text style={styles.info}>✉️ {dish.restaurante_email}</Text> : null}
 
-        {(dish.latitud || dish.direccion || dish.ciudad) ? (
-          <Pressable
-            style={[styles.actionBtn, styles.mapsBtn]}
-            onPress={() => openMaps(dish.latitud, dish.longitud, dish.direccion ?? "", dish.ciudad ?? "")}
-          >
-            <Text style={styles.actionBtnText}>📍 Ver en mapa</Text>
-          </Pressable>
-        ) : null}
-      </View>
+          <View style={styles.actionsSection}>
+            {dish.acepta_domicilio ? (
+              <Pressable
+                style={styles.actionBtn}
+                onPress={() => {
+                  trackEvento(dish.id, dish.restaurante_id, "domicilio", ciudad_usuario || dish.ciudad);
+                  if (dish.whatsapp) {
+                    openWhatsApp(
+                      dish.whatsapp,
+                      `Hola! Vi tu plato ${dish.nombre} en DishQuest y quiero pedirlo a domicilio 🛵`
+                    );
+                  } else {
+                    Alert.alert("Sin contacto", "Este restaurante no tiene WhatsApp registrado.");
+                  }
+                }}
+              >
+                <Text style={styles.actionBtnText}>🛵 Pedir domicilio</Text>
+              </Pressable>
+            ) : null}
 
-      {!dish.disponible ? (
-        <Text style={styles.unavailable}>⚠️ Este plato no está disponible actualmente</Text>
-      ) : null}
-    </ScrollView>
+            {dish.acepta_reserva ? (
+              <Pressable
+                style={[styles.actionBtn, styles.reservaBtn]}
+                onPress={() => {
+                  trackEvento(dish.id, dish.restaurante_id, "reserva", ciudad_usuario || dish.ciudad);
+                  if (dish.whatsapp) {
+                    openWhatsApp(
+                      dish.whatsapp,
+                      `Hola! Vi tu plato ${dish.nombre} en DishQuest y quiero hacer una reserva 📅`
+                    );
+                  } else {
+                    Alert.alert("Sin contacto", "Este restaurante no tiene WhatsApp registrado.");
+                  }
+                }}
+              >
+                <Text style={styles.actionBtnText}>📅 Reservar</Text>
+              </Pressable>
+            ) : null}
+
+            {(Number.isFinite(Number(dish.latitud)) && Number.isFinite(Number(dish.longitud))) || dish.direccion || dish.ciudad ? (
+              <Pressable
+                style={[styles.actionBtn, styles.mapsBtn]}
+                onPress={() => {
+                  trackEvento(dish.id, dish.restaurante_id, "mapa", ciudad_usuario || dish.ciudad);
+                  openMaps(dish.latitud, dish.longitud, dish.direccion ?? "", dish.ciudad ?? "");
+                }}
+              >
+                <Text style={styles.actionBtnText}>📍 Ver en mapa</Text>
+              </Pressable>
+            ) : null}
+          </View>
+
+          {!dish.disponible ? (
+            <Text style={styles.unavailable}>⚠️ Este plato no está disponible actualmente</Text>
+          ) : null}
+        </View>
+      </ScrollView>
+    </>
   );
 }
 
@@ -279,8 +315,6 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 24 },
   muted: { color: "#666" },
   errorText: { color: "red", fontWeight: "600", textAlign: "center" },
-  backRow: { padding: 20, paddingBottom: 8 },
-  backText: { fontSize: 14, fontWeight: "600", color: "#333" },
   backBtn: { marginTop: 12, backgroundColor: "#FF6A00", padding: 14, borderRadius: 10, alignItems: "center", minWidth: 120 },
   backBtnText: { color: "#fff", fontWeight: "700" },
 
@@ -288,7 +322,7 @@ const styles = StyleSheet.create({
 
   discountBadge: {
     position: "absolute",
-    top: 72,
+    top: 200,
     right: 20,
     backgroundColor: "#FF6A00",
     borderRadius: 20,
@@ -297,19 +331,19 @@ const styles = StyleSheet.create({
   },
   discountBadgeText: { color: "#fff", fontWeight: "800", fontSize: 14 },
 
-  name: { fontSize: 24, fontWeight: "700", paddingHorizontal: 20, paddingTop: 16 },
-  priceRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 20, marginTop: 6 },
+  body: { padding: 20 },
+  name: { fontSize: 24, fontWeight: "700", marginBottom: 6 },
+  priceRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 4 },
   price: { fontSize: 20, fontWeight: "700", color: "#FF6A00" },
   priceOld: { fontSize: 15, color: "#aaa", textDecorationLine: "line-through" },
-  categoria: { paddingHorizontal: 20, marginTop: 4, fontSize: 13, color: "#888" },
+  categoria: { fontSize: 13, color: "#888", marginBottom: 4 },
 
-  sectionTitle: { paddingHorizontal: 20, marginTop: 20, fontSize: 13, fontWeight: "700", color: "#999", textTransform: "uppercase", letterSpacing: 0.8 },
-  desc: { paddingHorizontal: 20, marginTop: 6, fontSize: 15, color: "#333", lineHeight: 22 },
+  sectionTitle: { marginTop: 18, fontSize: 12, fontWeight: "700", color: "#999", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 },
+  desc: { fontSize: 15, color: "#333", lineHeight: 22 },
+  restaurantName: { fontSize: 16, fontWeight: "700", color: "#111", marginBottom: 4 },
+  info: { fontSize: 14, color: "#444", marginBottom: 2 },
 
-  restaurantName: { paddingHorizontal: 20, marginTop: 6, fontSize: 16, fontWeight: "700", color: "#111" },
-  info: { paddingHorizontal: 20, marginTop: 4, fontSize: 14, color: "#444" },
-
-  actionsSection: { paddingHorizontal: 20, marginTop: 24, gap: 12 },
+  actionsSection: { marginTop: 24, gap: 12 },
   actionBtn: {
     minHeight: 56,
     backgroundColor: "#FF6A00",
@@ -321,6 +355,5 @@ const styles = StyleSheet.create({
   actionBtnText: { color: "#fff", fontWeight: "700", fontSize: 16 },
   reservaBtn: { backgroundColor: "#111" },
   mapsBtn: { backgroundColor: "#1a73e8" },
-
-  unavailable: { paddingHorizontal: 20, marginTop: 16, fontSize: 13, color: "#c00", fontWeight: "600" },
+  unavailable: { marginTop: 16, fontSize: 13, color: "#c00", fontWeight: "600" },
 });

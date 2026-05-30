@@ -234,7 +234,7 @@ export default function HomeScreen() {
         }));
 
       setItems([...localItems, ...backendItems]);
-    } catch (e) {
+    } catch {
       if (mode === "initial") setItems([]);
     } finally {
       if (mode === "initial") setLoading(false);
@@ -278,7 +278,7 @@ export default function HomeScreen() {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [query]);
+  }, [query, city]);
 
   const filteredItems = useMemo(() => {
     const base = searchResults !== null ? searchResults : items;
@@ -300,7 +300,13 @@ export default function HomeScreen() {
 
   function openDish(item: DishItem) {
     if (item.source === "backend") {
-      router.push(`/dish/${item.dishId}`);
+      router.push({
+        pathname: "/dish/[id]",
+        params: {
+          id: item.dishId,
+          ciudad_usuario: city || item.city || "",
+        },
+      });
       return;
     }
     alert("Este plato fue creado localmente. El detalle público se conectará pronto.");
