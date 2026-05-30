@@ -12,9 +12,18 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "DishQuest usa la camara para tomar fotos de menus fisicos y extraer platos con IA.",
+        "NSPhotoLibraryUsageDescription": "DishQuest usa tu galeria para seleccionar fotos de menus y extraer platos con IA."
+      }
     },
     "android": {
+      "permissions": [
+        "CAMERA",
+        "READ_MEDIA_IMAGES",
+        "READ_EXTERNAL_STORAGE"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png",

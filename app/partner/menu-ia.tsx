@@ -39,6 +39,7 @@ type SelectedImage = {
 };
 
 type SourceMode = "image" | "text" | "url";
+type ImageSource = "camera" | "gallery";
 
 const SAVE_OPTIONS = {
   compress: 0.82,
@@ -49,11 +50,10 @@ const SAVE_OPTIONS = {
 export default function MenuIaScreen() {
   const router = useRouter();
   const [sourceMode, setSourceMode] = useState<SourceMode>("image");
+  const [lastImageSource, setLastImageSource] = useState<ImageSource>("camera");
   const [image, setImage] = useState<SelectedImage | null>(null);
   const [menuText, setMenuText] = useState("");
   const [menuUrl, setMenuUrl] = useState("");
-  const [brightness, setBrightness] = useState(0);
-  const [contrast, setContrast] = useState(0);
   const [platos, setPlatos] = useState<ExtractedDish[]>([]);
   const [extracting, setExtracting] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -75,6 +75,18 @@ export default function MenuIaScreen() {
     );
   }
 
+  function setPickedImage(asset: ImagePicker.ImagePickerAsset, source: ImageSource) {
+    setSourceMode("image");
+    setLastImageSource(source);
+    setImage({
+      uri: asset.uri,
+      width: asset.width || 1200,
+      height: asset.height || 1600,
+      mediaType: asset.mimeType || "image/jpeg",
+    });
+    resetResult();
+  }
+
   async function pickFromCamera() {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
@@ -83,19 +95,10 @@ export default function MenuIaScreen() {
     }
 
     const result = await ImagePicker.launchCameraAsync({
-      quality: 0.85,
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.85,
     });
-    if (result.canceled) return;
-    const asset = result.assets[0];
-    setSourceMode("image");
-    setImage({
-      uri: asset.uri,
-      width: asset.width || 1200,
-      height: asset.height || 1600,
-      mediaType: asset.mimeType || "image/jpeg",
-    });
-    resetResult();
+    if (!result.canceled) setPickedImage(result.assets[0], "camera");
   }
 
   async function pickFromGallery() {
@@ -106,19 +109,10 @@ export default function MenuIaScreen() {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      quality: 0.85,
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.85,
     });
-    if (result.canceled) return;
-    const asset = result.assets[0];
-    setSourceMode("image");
-    setImage({
-      uri: asset.uri,
-      width: asset.width || 1200,
-      height: asset.height || 1600,
-      mediaType: asset.mimeType || "image/jpeg",
-    });
-    resetResult();
+    if (!result.canceled) setPickedImage(result.assets[0], "gallery");
   }
 
   async function cropImage() {
@@ -134,12 +128,7 @@ export default function MenuIaScreen() {
         [{ crop: { originX: insetX, originY: insetY, width: cropWidth, height: cropHeight } }],
         SAVE_OPTIONS
       );
-      setImage({
-        uri: result.uri,
-        width: result.width,
-        height: result.height,
-        mediaType: "image/jpeg",
-      });
+      setImage({ uri: result.uri, width: result.width, height: result.height, mediaType: "image/jpeg" });
       resetResult();
     } catch (e: any) {
       Alert.alert("Error", e?.message ?? "No se pudo recortar la imagen.");
@@ -149,30 +138,12 @@ export default function MenuIaScreen() {
   async function rotateImage() {
     if (!image) return;
     try {
-      const result = await ImageManipulator.manipulateAsync(
-        image.uri,
-        [{ rotate: 90 }],
-        SAVE_OPTIONS
-      );
-      setImage({
-        uri: result.uri,
-        width: result.width,
-        height: result.height,
-        mediaType: "image/jpeg",
-      });
+      const result = await ImageManipulator.manipulateAsync(image.uri, [{ rotate: 90 }], SAVE_OPTIONS);
+      setImage({ uri: result.uri, width: result.width, height: result.height, mediaType: "image/jpeg" });
       resetResult();
     } catch (e: any) {
       Alert.alert("Error", e?.message ?? "No se pudo rotar la imagen.");
     }
-  }
-
-  function imageNotes() {
-    const notes = [];
-    if (brightness > 0) notes.push(`imagen aclarada +${brightness}`);
-    if (brightness < 0) notes.push(`imagen oscurecida ${brightness}`);
-    if (contrast > 0) notes.push(`contraste aumentado +${contrast}`);
-    if (contrast < 0) notes.push(`contraste reducido ${contrast}`);
-    return notes.join("; ");
   }
 
   async function analyzeImage() {
@@ -185,7 +156,6 @@ export default function MenuIaScreen() {
       const data = await backendPost<MenuIaResponse>("/partner/menu-ia", {
         image_base64: prepared.base64,
         media_type: "image/jpeg",
-        image_notes: imageNotes(),
       });
       normalizeDishes(data);
     } catch (e: any) {
@@ -193,6 +163,16 @@ export default function MenuIaScreen() {
     } finally {
       setExtracting(false);
     }
+  }
+
+  async function retakeImage() {
+    setImage(null);
+    resetResult();
+    if (lastImageSource === "gallery") {
+      await pickFromGallery();
+      return;
+    }
+    await pickFromCamera();
   }
 
   async function analyzeText() {
@@ -204,9 +184,7 @@ export default function MenuIaScreen() {
     setExtracting(true);
     resetResult();
     try {
-      const data = await backendPost<MenuIaResponse>("/partner/menu-ia", {
-        menu_text: text,
-      });
+      const data = await backendPost<MenuIaResponse>("/partner/menu-ia", { menu_text: text });
       normalizeDishes(data);
     } catch (e: any) {
       Alert.alert("Error IA", e?.message ?? "No se pudo extraer el menu.");
@@ -224,9 +202,7 @@ export default function MenuIaScreen() {
     setExtracting(true);
     resetResult();
     try {
-      const data = await backendPost<MenuIaResponse>("/partner/menu-ia", {
-        menu_url: url,
-      });
+      const data = await backendPost<MenuIaResponse>("/partner/menu-ia", { menu_url: url });
       normalizeDishes(data);
     } catch (e: any) {
       Alert.alert("Error IA", e?.message ?? "No se pudo leer la URL del menu.");
@@ -236,9 +212,7 @@ export default function MenuIaScreen() {
   }
 
   function updateDish(index: number, patch: Partial<ExtractedDish>) {
-    setPlatos((prev) =>
-      prev.map((plato, i) => (i === index ? { ...plato, ...patch } : plato))
-    );
+    setPlatos((prev) => prev.map((plato, i) => (i === index ? { ...plato, ...patch } : plato)));
   }
 
   async function saveSelected() {
@@ -259,9 +233,7 @@ export default function MenuIaScreen() {
     try {
       for (const plato of selected) {
         if (!plato.nombre.trim()) continue;
-        const ingredientsText = plato.ingredientes.length
-          ? `Ingredientes: ${plato.ingredientes.join(", ")}`
-          : "";
+        const ingredientsText = plato.ingredientes.length ? `Ingredientes: ${plato.ingredientes.join(", ")}` : "";
         const descripcion = [plato.descripcion.trim(), ingredientsText].filter(Boolean).join("\n");
         await backendPost("/partner/platos", {
           nombre: plato.nombre.trim(),
@@ -290,79 +262,53 @@ export default function MenuIaScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <Text style={styles.title}>Subir menu con IA</Text>
 
-      <View style={styles.sourceGrid}>
-        <Pressable style={styles.sourceButton} onPress={pickFromCamera} disabled={extracting || saving}>
-          <Text style={styles.sourceText}>📷 Tomar foto con camara</Text>
-        </Pressable>
-        <Pressable style={styles.sourceButton} onPress={pickFromGallery} disabled={extracting || saving}>
-          <Text style={styles.sourceText}>🖼️ Seleccionar de galeria</Text>
-        </Pressable>
-        <Pressable
-          style={[styles.sourceButton, sourceMode === "text" && styles.sourceButtonActive]}
-          onPress={() => setSourceMode("text")}
-          disabled={extracting || saving}
-        >
-          <Text style={styles.sourceText}>📝 Escribir menu en texto libre</Text>
-        </Pressable>
-        <Pressable
-          style={[styles.sourceButton, sourceMode === "url" && styles.sourceButtonActive]}
-          onPress={() => setSourceMode("url")}
-          disabled={extracting || saving}
-        >
-          <Text style={styles.sourceText}>🔗 Pegar URL de menu online</Text>
-        </Pressable>
-      </View>
-
-      {sourceMode === "image" && image ? (
-        <View style={styles.editor}>
-          <Image source={{ uri: image.uri }} style={styles.preview} />
-          <View style={styles.toolRow}>
-            <Pressable style={styles.toolButton} onPress={cropImage} disabled={extracting}>
-              <Text style={styles.toolText}>Recortar</Text>
-            </Pressable>
-            <Pressable style={styles.toolButton} onPress={rotateImage} disabled={extracting}>
-              <Text style={styles.toolText}>Rotar</Text>
-            </Pressable>
-          </View>
-
-          <View style={styles.adjustCard}>
-            <Text style={styles.cardTitle}>Ajustar brillo/contraste</Text>
-            <View style={styles.adjustRow}>
-              <Text style={styles.adjustLabel}>Brillo {brightness}</Text>
-              <View style={styles.stepper}>
-                <Pressable style={styles.stepButton} onPress={() => setBrightness((v) => Math.max(-2, v - 1))}>
-                  <Text style={styles.stepText}>-</Text>
-                </Pressable>
-                <Pressable style={styles.stepButton} onPress={() => setBrightness((v) => Math.min(2, v + 1))}>
-                  <Text style={styles.stepText}>+</Text>
-                </Pressable>
-              </View>
-            </View>
-            <View style={styles.adjustRow}>
-              <Text style={styles.adjustLabel}>Contraste {contrast}</Text>
-              <View style={styles.stepper}>
-                <Pressable style={styles.stepButton} onPress={() => setContrast((v) => Math.max(-2, v - 1))}>
-                  <Text style={styles.stepText}>-</Text>
-                </Pressable>
-                <Pressable style={styles.stepButton} onPress={() => setContrast((v) => Math.min(2, v + 1))}>
-                  <Text style={styles.stepText}>+</Text>
-                </Pressable>
-              </View>
-            </View>
-          </View>
-
-          <Pressable style={styles.button} onPress={analyzeImage} disabled={extracting || saving}>
-            <Text style={styles.buttonText}>
-              {extracting ? "Analizando..." : "Usar esta imagen"}
-            </Text>
+      {!image ? (
+        <View style={styles.sourceGrid}>
+          <Pressable style={styles.sourceButton} onPress={pickFromCamera} disabled={extracting || saving}>
+            <Text style={styles.sourceText}>📷 Tomar foto con cámara</Text>
           </Pressable>
-          <Pressable style={styles.secondaryButton} onPress={() => setImage(null)} disabled={extracting || saving}>
-            <Text style={styles.secondaryText}>Volver a tomar</Text>
+          <Pressable style={styles.sourceButton} onPress={pickFromGallery} disabled={extracting || saving}>
+            <Text style={styles.sourceText}>🖼️ Seleccionar de galería</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.sourceButton, sourceMode === "text" && styles.sourceButtonActive]}
+            onPress={() => setSourceMode("text")}
+            disabled={extracting || saving}
+          >
+            <Text style={styles.sourceText}>📝 Escribir menú en texto libre</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.sourceButton, sourceMode === "url" && styles.sourceButtonActive]}
+            onPress={() => setSourceMode("url")}
+            disabled={extracting || saving}
+          >
+            <Text style={styles.sourceText}>🔗 Pegar URL de menú online</Text>
           </Pressable>
         </View>
       ) : null}
 
-      {sourceMode === "text" ? (
+      {sourceMode === "image" && image ? (
+        <View style={styles.imageEditor}>
+          <Text style={styles.editorTitle}>Edita la imagen antes de enviarla</Text>
+          <Image source={{ uri: image.uri }} style={styles.largePreview} resizeMode="contain" />
+          <View style={styles.toolRow}>
+            <Pressable style={styles.toolButton} onPress={cropImage} disabled={extracting}>
+              <Text style={styles.toolText}>✂️ Recortar</Text>
+            </Pressable>
+            <Pressable style={styles.toolButton} onPress={rotateImage} disabled={extracting}>
+              <Text style={styles.toolText}>🔄 Rotar</Text>
+            </Pressable>
+          </View>
+          <Pressable style={styles.confirmButton} onPress={analyzeImage} disabled={extracting || saving}>
+            <Text style={styles.buttonText}>{extracting ? "Analizando..." : "✅ Usar esta imagen"}</Text>
+          </Pressable>
+          <Pressable style={styles.secondaryButton} onPress={retakeImage} disabled={extracting || saving}>
+            <Text style={styles.secondaryText}>📷 Volver a tomar</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {sourceMode === "text" && !image ? (
         <View style={styles.editor}>
           <TextInput
             style={[styles.input, styles.freeText]}
@@ -377,7 +323,7 @@ export default function MenuIaScreen() {
         </View>
       ) : null}
 
-      {sourceMode === "url" ? (
+      {sourceMode === "url" && !image ? (
         <View style={styles.editor}>
           <TextInput
             style={styles.input}
@@ -414,11 +360,7 @@ export default function MenuIaScreen() {
                 />
               </View>
               <Text style={styles.label}>Nombre</Text>
-              <TextInput
-                style={styles.input}
-                value={plato.nombre}
-                onChangeText={(nombre) => updateDish(index, { nombre })}
-              />
+              <TextInput style={styles.input} value={plato.nombre} onChangeText={(nombre) => updateDish(index, { nombre })} />
               <Text style={styles.label}>Precio</Text>
               <TextInput
                 style={styles.input}
@@ -434,23 +376,15 @@ export default function MenuIaScreen() {
                 onChangeText={(descripcion) => updateDish(index, { descripcion })}
               />
               <Text style={styles.label}>Categoria</Text>
-              <TextInput
-                style={styles.input}
-                value={plato.categoria}
-                onChangeText={(categoria) => updateDish(index, { categoria })}
-              />
+              <TextInput style={styles.input} value={plato.categoria} onChangeText={(categoria) => updateDish(index, { categoria })} />
               {plato.ingredientes.length ? (
-                <Text style={styles.ingredients}>
-                  Ingredientes: {plato.ingredientes.join(", ")}
-                </Text>
+                <Text style={styles.ingredients}>Ingredientes: {plato.ingredientes.join(", ")}</Text>
               ) : null}
             </View>
           ))}
 
           <Pressable style={[styles.saveButton, saving && styles.disabled]} onPress={saveSelected} disabled={saving}>
-            <Text style={styles.saveButtonText}>
-              {saving ? "Guardando..." : "Guardar seleccionados"}
-            </Text>
+            <Text style={styles.saveButtonText}>{saving ? "Guardando..." : "Guardar seleccionados"}</Text>
           </Pressable>
         </>
       ) : null}
@@ -479,31 +413,21 @@ const styles = StyleSheet.create({
   sourceButtonActive: { borderColor: "#FF6A00", backgroundColor: "#FFF3EA" },
   sourceText: { color: "#111", fontWeight: "800" },
   editor: { gap: 12, marginBottom: 18 },
-  preview: { width: "100%", height: 260, borderRadius: 10, backgroundColor: "#eee" },
+  imageEditor: { gap: 12, marginBottom: 18 },
+  editorTitle: { fontSize: 16, fontWeight: "800", color: "#111" },
+  largePreview: { width: "100%", height: 420, borderRadius: 10, backgroundColor: "#111" },
   toolRow: { flexDirection: "row", gap: 10 },
   toolButton: {
     flex: 1,
-    minHeight: 44,
+    minHeight: 48,
     borderRadius: 10,
     backgroundColor: "#eee",
     alignItems: "center",
     justifyContent: "center",
   },
   toolText: { color: "#333", fontWeight: "800" },
-  adjustCard: { borderWidth: 1, borderColor: "#eee", borderRadius: 10, padding: 12, gap: 10 },
-  adjustRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  adjustLabel: { color: "#333", fontWeight: "700" },
-  stepper: { flexDirection: "row", gap: 8 },
-  stepButton: {
-    width: 40,
-    height: 36,
-    borderRadius: 8,
-    backgroundColor: "#f0f0f0",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  stepText: { fontSize: 20, fontWeight: "800", color: "#111" },
   button: { backgroundColor: "#FF6A00", borderRadius: 10, padding: 15, alignItems: "center" },
+  confirmButton: { backgroundColor: "#159447", borderRadius: 10, padding: 15, alignItems: "center" },
   buttonText: { color: "#fff", fontWeight: "800" },
   center: { alignItems: "center", gap: 10, marginVertical: 24 },
   muted: { color: "#666", textAlign: "center" },
