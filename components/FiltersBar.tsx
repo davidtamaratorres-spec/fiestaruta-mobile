@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import {
+  ActivityIndicator,
+  FlatList,
   Modal,
   Pressable,
   StyleSheet,
@@ -17,9 +19,10 @@ type Props = {
 
   onlyDiscounts: boolean;
   onToggleDiscounts: () => void;
-};
 
-const cities = ["Medellín", "Bogotá", "Sincelejo"];
+  cities: string[];
+  isSearching?: boolean;
+};
 
 export function FiltersBar({
   query,
@@ -28,12 +31,12 @@ export function FiltersBar({
   onCityChange,
   onlyDiscounts,
   onToggleDiscounts,
+  cities,
+  isSearching = false,
 }: Props) {
   const [cityModalOpen, setCityModalOpen] = useState(false);
 
-  const cityLabel = useMemo(() => {
-    return city ?? "Todas";
-  }, [city]);
+  const cityLabel = useMemo(() => city ?? "Todas", [city]);
 
   const selectCity = (c: string | null) => {
     onCityChange(c);
@@ -42,178 +45,160 @@ export function FiltersBar({
 
   return (
     <View style={styles.container}>
-      {/* Buscar plato */}
-      <TextInput
-        placeholder="¿Qué plato estás buscando?"
-        value={query}
-        onChangeText={onQueryChange}
-        style={styles.input}
-        returnKeyType="search"
-      />
+      <View style={styles.searchRow}>
+        <TextInput
+          placeholder="¿Qué plato estás buscando?"
+          value={query}
+          onChangeText={onQueryChange}
+          style={styles.input}
+          returnKeyType="search"
+          clearButtonMode="while-editing"
+        />
+        {isSearching && (
+          <ActivityIndicator
+            size="small"
+            color="#FF6A00"
+            style={styles.spinner}
+          />
+        )}
+      </View>
 
-      {/* Selector ciudad (abre modal) */}
-      <Pressable
-        style={styles.citySelector}
-        onPress={() => setCityModalOpen(true)}
-      >
-        <Text style={styles.cityText}>Ciudad: {cityLabel} ▾</Text>
-      </Pressable>
+      <View style={styles.row}>
+        <Pressable
+          style={styles.citySelector}
+          onPress={() => setCityModalOpen(true)}
+        >
+          <Text style={styles.cityText}>📍 {cityLabel} ▾</Text>
+        </Pressable>
 
-      {/* Modal de ciudades */}
+        <Pressable
+          style={[styles.discount, onlyDiscounts && styles.discountActive]}
+          onPress={onToggleDiscounts}
+        >
+          <Text style={onlyDiscounts ? styles.textActive : styles.text}>
+            💸 Descuento
+          </Text>
+        </Pressable>
+      </View>
+
       <Modal
         visible={cityModalOpen}
         transparent
-        animationType="fade"
+        animationType="slide"
         onRequestClose={() => setCityModalOpen(false)}
       >
-        {/* Backdrop: tocar fuera cierra */}
         <Pressable
           style={styles.backdrop}
           onPress={() => setCityModalOpen(false)}
         >
-          {/* Sheet */}
           <Pressable style={styles.sheet} onPress={() => {}}>
             <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Selecciona ciudad</Text>
+              <Text style={styles.sheetTitle}>
+                Selecciona ciudad ({cities.length})
+              </Text>
               <Pressable onPress={() => setCityModalOpen(false)} hitSlop={10}>
                 <Text style={styles.sheetClose}>Cerrar</Text>
               </Pressable>
             </View>
 
-            <Pressable
-              style={[styles.cityItem, city === null && styles.cityItemActive]}
-              onPress={() => selectCity(null)}
-            >
-              <Text style={city === null ? styles.cityActiveText : styles.cityItemText}>
-                Todas
-              </Text>
-            </Pressable>
-
-            {cities.map((c) => {
-              const active = city === c;
-              return (
-                <Pressable
-                  key={c}
-                  style={[styles.cityItem, active && styles.cityItemActive]}
-                  onPress={() => selectCity(c)}
-                >
-                  <Text style={active ? styles.cityActiveText : styles.cityItemText}>
-                    {c}
-                  </Text>
-                </Pressable>
-              );
-            })}
+            <FlatList
+              data={[null, ...cities]}
+              keyExtractor={(item) => item ?? "__all__"}
+              showsVerticalScrollIndicator
+              contentContainerStyle={{ gap: 6, paddingBottom: 30 }}
+              renderItem={({ item: c }) => {
+                const active = city === c;
+                return (
+                  <Pressable
+                    style={[styles.cityItem, active && styles.cityItemActive]}
+                    onPress={() => selectCity(c)}
+                  >
+                    <Text
+                      style={active ? styles.cityActiveText : styles.cityItemText}
+                    >
+                      {c ?? "Todas las ciudades"}
+                    </Text>
+                  </Pressable>
+                );
+              }}
+            />
           </Pressable>
         </Pressable>
       </Modal>
-
-      {/* Descuento */}
-      <Pressable
-        style={[styles.discount, onlyDiscounts && styles.discountActive]}
-        onPress={onToggleDiscounts}
-      >
-        <Text style={onlyDiscounts ? styles.textActive : styles.text}>
-          💸 Descuento
-        </Text>
-      </Pressable>
-
-      {/* Nota técnica:
-          onlyDiscounts hoy NO filtra en Home porque BackendDish no trae flag de descuento.
-          En el PASO 3 lo alineamos (o lo ocultamos si aún no aplica). */}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    marginBottom: 16,
-    gap: 10,
-  },
-  input: {
+  container: { marginBottom: 16, gap: 10 },
+
+  searchRow: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "#f2f2f2",
     borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: 4,
   },
+  input: {
+    flex: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    fontSize: 14,
+  },
+  spinner: { marginRight: 10 },
+
+  row: { flexDirection: "row", gap: 8 },
 
   citySelector: {
+    flex: 1,
     backgroundColor: "#f2f2f2",
     padding: 12,
     borderRadius: 10,
   },
-  cityText: {
-    fontSize: 14,
-    fontWeight: "500",
-  },
+  cityText: { fontSize: 14, fontWeight: "500" },
 
-  // Modal
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.35)",
+    backgroundColor: "rgba(0,0,0,0.4)",
     justifyContent: "flex-end",
   },
   sheet: {
     backgroundColor: "#fff",
-    padding: 14,
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
+    padding: 16,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: "75%",
   },
   sheetHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingBottom: 10,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+    marginBottom: 8,
   },
-  sheetTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  sheetClose: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
+  sheetTitle: { fontSize: 16, fontWeight: "700" },
+  sheetClose: { fontSize: 13, fontWeight: "600", color: "#FF6A00" },
 
   cityItem: {
     paddingVertical: 12,
-    paddingHorizontal: 10,
+    paddingHorizontal: 14,
     borderRadius: 10,
-    marginBottom: 8,
     backgroundColor: "#f5f5f5",
   },
-  cityItemActive: {
-    backgroundColor: "#000",
-  },
-  cityItemText: {
-    fontSize: 14,
-    color: "#000",
-    fontWeight: "500",
-  },
-  cityActiveText: {
-    fontSize: 14,
-    color: "#fff",
-    fontWeight: "700",
-  },
+  cityItemActive: { backgroundColor: "#FF6A00" },
+  cityItemText: { fontSize: 14, color: "#111", fontWeight: "500" },
+  cityActiveText: { fontSize: 14, color: "#fff", fontWeight: "700" },
 
-  // Discount chip
   discount: {
     alignSelf: "flex-start",
     paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: "#e0e0e0",
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: "#f2f2f2",
   },
-  discountActive: {
-    backgroundColor: "#000",
-  },
-  text: {
-    fontSize: 13,
-    color: "#000",
-  },
-  textActive: {
-    fontSize: 13,
-    color: "#fff",
-    fontWeight: "600",
-  },
+  discountActive: { backgroundColor: "#000" },
+  text: { fontSize: 13, color: "#000" },
+  textActive: { fontSize: 13, color: "#fff", fontWeight: "600" },
 });
-
-

@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -15,7 +15,12 @@ import {
 } from "react-native";
 
 import { FiltersBar } from "../../components/FiltersBar";
-import { BackendDish, fetchBackendDishes } from "../services/backendDishes";
+import { getPublicDishes } from "../services/publicDishes";
+import {
+  BackendDish,
+  fetchBackendDishes,
+  searchBackendDishes,
+} from "../services/backendDishes";
 import {
   BackendPromotion,
   fetchBackendPromotions,
@@ -30,16 +35,17 @@ type DishItem = {
   dishId: string;
   name: string;
   price: number;
-  restaurantId: number;
+  restaurantId: string;
   restaurantName: string;
   city: string;
   hasDiscount: boolean;
-  imageUrl?: string; // viene del backend
+  imageUrl?: string;
+  imageUri?: string;
+  source: "backend" | "local";
 };
 
 const PLACEHOLDER_IMG = require("../../assets/images/dish-placeholder.png");
 
-// ✅ filename -> require(local)
 const DISH_IMAGES: Record<string, any> = {
   "ajiaco.jpg": require("../../assets/images/dishes/ajiaco.jpg"),
   "arroz-con-camarones.jpg": require("../../assets/images/dishes/arroz-con-camarones.jpg"),
@@ -72,67 +78,54 @@ const DISH_IMAGES: Record<string, any> = {
 };
 
 function norm(s: string) {
-  return s
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
+  return s.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
 
-// ✅ fallback por nombre (para demo)
 function guessFilenameFromDishName(dishName: string): string | null {
   const n = norm(dishName);
-
   if (n.includes("bandeja")) return "bandeja-paisa.jpg";
   if (n.includes("ajiaco")) return "ajiaco.jpg";
   if (n.includes("mondongo")) return "mondongo.jpg";
   if (n.includes("mote")) return "mote-de-queso.jpg";
-
   if (n.includes("carbonara")) return "pasta-carbonara.jpg";
   if (n.includes("pizza") && n.includes("margarita")) return "pizza-margarita.jpg";
-
   if (n.includes("hamburguesa") && n.includes("doble")) return "hamburguesa-doble.jpg";
   if (n.includes("hamburguesa") && n.includes("vegana")) return "hamburguesa-vegana.jpg";
   if (n.includes("hamburguesa") && n.includes("artesanal")) return "hamburguesa-artesanal.jpg";
   if (n.includes("hamburguesa")) return "hamburguesa-clasica.jpg";
-
-  if (n.includes("lasa") || n.includes("lasaña")) return "lasana-vegana.jpg";
-
+  if (n.includes("lasa")) return "lasana-vegana.jpg";
   if (n.includes("mojarra")) return "mojarra-frita.jpg";
   if (n.includes("pargo")) return "pargo-rojo-frito.jpg";
   if (n.includes("cazuela")) return "cazuela-mariscos.jpg";
-
   if (n.includes("desayuno")) return "desayuno-campesino.jpg";
   if (n.includes("cafe")) return "cafe-especial.jpg";
   if (n.includes("smoothie")) return "smoothie-antioxidante.jpg";
-
   if (n.includes("wrap")) return "wrap-vegetal.jpg";
   if (n.includes("papas")) return "papas-artesanales.jpg";
   if (n.includes("tacos")) return "tacos-al-pastor.jpg";
   if (n.includes("burrito")) return "burrito-mixto.jpg";
-
   return null;
 }
 
 function pickLocalImage(imageUrl: string | undefined, dishName: string) {
-  // 1) Si backend trae imagen_url, lo intentamos por filename
   if (imageUrl && imageUrl.trim()) {
     const filename = imageUrl.trim().split("/").pop() || imageUrl.trim();
     return DISH_IMAGES[filename] ?? PLACEHOLDER_IMG;
   }
-
-  // 2) Si viene vacío, adivinamos por nombre (demo)
   const guessed = guessFilenameFromDishName(dishName);
   if (guessed && DISH_IMAGES[guessed]) return DISH_IMAGES[guessed];
-
   return PLACEHOLDER_IMG;
+}
+
+function pickImageSource(item: DishItem) {
+  if (item.imageUri) return { uri: item.imageUri };
+  if (item.imageUrl && item.imageUrl.startsWith("http")) return { uri: item.imageUrl };
+  return pickLocalImage(item.imageUrl, item.name);
 }
 
 function buildRestaurantMap(restaurants: BackendRestaurant[]) {
   const map = new Map<number, string>();
-  for (const r of restaurants) {
-    map.set(Number(r.id), r.nombre ?? `Restaurante #${r.id}`);
-  }
+  for (const r of restaurants) map.set(Number(r.id), r.nombre ?? `Restaurante #${r.id}`);
   return map;
 }
 
@@ -141,15 +134,32 @@ function buildDiscountRestaurantSet(promotions: BackendPromotion[]) {
   for (const p of promotions) {
     const rid = Number(p.restaurante_id);
     if (Number.isNaN(rid)) continue;
-
     const active =
       p.activa === 1 ||
       p.disponible === 1 ||
       (p.activa === undefined && p.disponible === undefined);
-
     if (active) set.add(rid);
   }
   return set;
+}
+
+function dishToItem(
+  d: BackendDish,
+  rmap: Map<number, string>,
+  discountSet: Set<number>
+): DishItem {
+  const rid = Number(d.restaurante_id);
+  return {
+    dishId: String(d.id),
+    name: d.nombre,
+    price: d.precio,
+    restaurantId: String(rid),
+    restaurantName: rmap.get(rid) ?? d.restaurante ?? `Restaurante #${d.restaurante_id}`,
+    city: d.municipio || d.ciudad || "",
+    hasDiscount: discountSet.has(rid),
+    imageUrl: d.imagen_url || "",
+    source: "backend",
+  };
 }
 
 export default function HomeScreen() {
@@ -160,40 +170,58 @@ export default function HomeScreen() {
   const [onlyDiscounts, setOnlyDiscounts] = useState(false);
 
   const [items, setItems] = useState<DishItem[]>([]);
+  const [cities, setCities] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  const [searchResults, setSearchResults] = useState<DishItem[] | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rmapRef = useRef<Map<number, string>>(new Map());
+  const discountSetRef = useRef<Set<number>>(new Set());
 
   async function loadData(mode: "initial" | "refresh") {
     if (mode === "initial") setLoading(true);
     if (mode === "refresh") setRefreshing(true);
 
     try {
-      const [dishes, restaurants, promotions] = await Promise.all([
+      const [dishes, restaurants, promotions, localDishes] = await Promise.all([
         fetchBackendDishes(),
         fetchBackendRestaurants(),
         fetchBackendPromotions(),
+        getPublicDishes(),
       ]);
 
       const rmap = buildRestaurantMap(restaurants);
-      const discountRestaurants = buildDiscountRestaurantSet(promotions);
+      const discountSet = buildDiscountRestaurantSet(promotions);
+      rmapRef.current = rmap;
+      discountSetRef.current = discountSet;
 
-      const adapted: DishItem[] = (dishes as BackendDish[]).map((d) => {
-        const rid = Number(d.restaurante_id);
-        return {
-          dishId: String(d.id),
-          name: d.nombre,
-          price: d.precio,
-          restaurantId: rid,
-          restaurantName: rmap.get(rid) ?? `Restaurante #${d.restaurante_id}`,
-          city: d.municipio || d.ciudad || "",
-          hasDiscount: discountRestaurants.has(rid),
-          imageUrl: d.imagen_url || "",
-        };
-      });
+      const uniqueCities = Array.from(
+        new Set(restaurants.map((r) => r.ciudad ?? "").filter(Boolean))
+      ).sort();
+      setCities(uniqueCities);
 
-      setItems(adapted);
+      const backendItems = (dishes as BackendDish[]).map((d) =>
+        dishToItem(d, rmap, discountSet)
+      );
+
+      const localItems: DishItem[] = localDishes
+        .filter((d: any) => d.available !== false)
+        .map((d: any) => ({
+          dishId: `local-${d.id}`,
+          name: d.name,
+          price: Number(d.price) || 0,
+          restaurantId: String(d.restaurantId),
+          restaurantName: d.restaurantName || "Restaurante local",
+          city: d.city || "",
+          hasDiscount: Boolean(d.promo),
+          imageUri: d.imageUri,
+          source: "local" as const,
+        }));
+
+      setItems([...localItems, ...backendItems]);
     } catch (e) {
-      console.log("Error cargando data:", e);
       if (mode === "initial") setItems([]);
     } finally {
       if (mode === "initial") setLoading(false);
@@ -205,34 +233,71 @@ export default function HomeScreen() {
     loadData("initial");
   }, []);
 
-  const filteredItems = useMemo(() => {
-    if (items.length === 0 && query.trim()) {
-      logDemand(query, city);
+  // Búsqueda predictiva con debounce 300ms
+  useEffect(() => {
+    const q = query.trim();
+
+    if (!q) {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      setSearchResults(null);
+      setIsSearching(false);
+      return;
     }
 
-    const q = norm(query);
-    const c = city ? norm(city) : null;
+    setIsSearching(true);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
 
-    return items
-      .filter((i) => (q ? norm(i.name).includes(q) : true))
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const results = await searchBackendDishes(q);
+        const mapped = results.map((d) =>
+          dishToItem(d, rmapRef.current, discountSetRef.current)
+        );
+        setSearchResults(mapped);
+        if (mapped.length === 0) logDemand(q, city);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [query]);
+
+  const filteredItems = useMemo(() => {
+    const base = searchResults !== null ? searchResults : items;
+    const c = city ? norm(city) : null;
+    return base
       .filter((i) => (c ? norm(i.city) === c : true))
       .filter((i) => (onlyDiscounts ? i.hasDiscount : true));
-  }, [items, query, city, onlyDiscounts]);
+  }, [items, searchResults, city, onlyDiscounts]);
 
   const hasActiveFilters = query.length > 0 || !!city || onlyDiscounts;
 
-  const clearFilters = () => {
+  function clearFilters() {
     setQuery("");
     setCity(null);
     setOnlyDiscounts(false);
+    setSearchResults(null);
     Keyboard.dismiss();
-  };
+  }
+
+  function openDish(item: DishItem) {
+    if (item.source === "backend") {
+      router.push(`/dish/${item.dishId}`);
+      return;
+    }
+    alert("Este plato fue creado localmente. El detalle público se conectará pronto.");
+  }
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" />
-        <Text style={{ marginTop: 10 }}>Cargando platos...</Text>
+        <ActivityIndicator size="large" color="#FF6A00" />
+        <Text style={{ marginTop: 10, color: "#666" }}>Cargando platos...</Text>
       </View>
     );
   }
@@ -253,17 +318,20 @@ export default function HomeScreen() {
             onCityChange={setCity}
             onlyDiscounts={onlyDiscounts}
             onToggleDiscounts={() => setOnlyDiscounts((v) => !v)}
+            cities={cities}
+            isSearching={isSearching}
           />
 
           {hasActiveFilters && (
             <View style={styles.activeBar}>
               <Text style={styles.activeText}>
-                Filtros:
-                {city ? ` Ciudad: ${city}` : ""}
+                {query ? `"${query}"` : ""}
+                {city ? ` · ${city}` : ""}
                 {onlyDiscounts ? " · Descuento" : ""}
-                {query ? ` · “${query}”` : ""}
+                {searchResults !== null
+                  ? ` · ${filteredItems.length} resultado${filteredItems.length !== 1 ? "s" : ""}`
+                  : ""}
               </Text>
-
               <Pressable onPress={clearFilters}>
                 <Text style={styles.clear}>Limpiar</Text>
               </Pressable>
@@ -273,54 +341,35 @@ export default function HomeScreen() {
           <FlatList
             data={filteredItems}
             keyExtractor={(item) => item.dishId}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode={Platform.OS === "ios" ? "on-drag" : "none"}
-            onScrollBeginDrag={Keyboard.dismiss}
-            contentContainerStyle={{ gap: 12, paddingBottom: 40 }}
             refreshing={refreshing}
             onRefresh={() => loadData("refresh")}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingBottom: 20, gap: 12 }}
             renderItem={({ item }) => (
-              <Pressable
-                style={styles.card}
-                onPress={() =>
-                  router.push({
-                    pathname: "/dish/[id]",
-                    params: { id: item.dishId },
-                  })
-                }
-              >
-                <Image
-                  source={pickLocalImage(item.imageUrl, item.name)}
-                  style={styles.thumb}
-                  resizeMode="cover"
-                />
-
+              <Pressable style={styles.card} onPress={() => openDish(item)}>
+                <Image source={pickImageSource(item)} style={styles.thumb} />
                 <View style={styles.cardBody}>
                   <View style={styles.row}>
-                    <Text style={styles.name} numberOfLines={1}>
-                      {item.name}
-                    </Text>
-
+                    <Text style={styles.name}>{item.name}</Text>
                     {item.hasDiscount && (
                       <View style={styles.badge}>
-                        <Text style={styles.badgeText}>PROMO</Text>
+                        <Text style={styles.badgeText}>Promo</Text>
                       </View>
                     )}
                   </View>
-
-                  <Text style={styles.sub} numberOfLines={1}>
-                    {item.restaurantName}
-                  </Text>
-
-                  <Text style={styles.price}>${item.price}</Text>
-                  <Text style={styles.city} numberOfLines={1}>
-                    📍 {item.city}
-                  </Text>
+                  <Text style={styles.sub}>{item.restaurantName}</Text>
+                  <Text style={styles.price}>${item.price.toLocaleString("es-CO")}</Text>
+                  <Text style={styles.city}>{item.city}</Text>
+                  {item.source === "local" && (
+                    <Text style={styles.localTag}>Plato registrado por socio</Text>
+                  )}
                 </View>
               </Pressable>
             )}
             ListEmptyComponent={
-              <Text style={styles.empty}>No hay resultados.</Text>
+              <Text style={styles.empty}>
+                {isSearching ? "Buscando..." : "No hay resultados."}
+              </Text>
             }
           />
         </View>
@@ -332,13 +381,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 20, backgroundColor: "#fff" },
   title: { fontSize: 24, fontWeight: "700", marginBottom: 12 },
-
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
+  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   activeBar: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -349,56 +392,17 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   activeText: { fontSize: 12, color: "#333", flex: 1 },
-  clear: { fontSize: 12, fontWeight: "600", color: "#000" },
-
-  card: {
-    flexDirection: "row",
-    gap: 12,
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: "#f2f2f2",
-  },
-
-  thumb: {
-    width: 74,
-    height: 74,
-    borderRadius: 12,
-    backgroundColor: "#e6e6e6",
-  },
-
+  clear: { fontSize: 12, fontWeight: "600", color: "#FF6A00" },
+  card: { flexDirection: "row", gap: 12, padding: 12, borderRadius: 12, backgroundColor: "#f2f2f2" },
+  thumb: { width: 74, height: 74, borderRadius: 12, backgroundColor: "#e6e6e6" },
   cardBody: { flex: 1 },
-
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 10,
-  },
-
-  badge: {
-    backgroundColor: "#FF6A00",
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-  },
-  badgeText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 11,
-  },
-
+  row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 },
+  badge: { backgroundColor: "#FF6A00", borderRadius: 999, paddingHorizontal: 12, paddingVertical: 5 },
+  badgeText: { color: "#fff", fontWeight: "700", fontSize: 11 },
   name: { fontSize: 16, fontWeight: "700", flex: 1 },
   sub: { marginTop: 2, fontSize: 13, color: "#444" },
-  price: { marginTop: 6, fontSize: 14 },
+  price: { marginTop: 6, fontSize: 14, fontWeight: "600", color: "#FF6A00" },
   city: { marginTop: 4, fontSize: 13, color: "#555" },
-
+  localTag: { marginTop: 6, fontSize: 12, fontWeight: "600", color: "#FF6A00" },
   empty: { textAlign: "center", marginTop: 30, color: "#666" },
 });
-
-
-
-
-
-
-
-
