@@ -19,6 +19,10 @@ export default function PartnerLayout() {
         name="home"
         options={{ title: 'Mi restaurante' }}
       />
+      <Stack.Screen
+        name="edit-dish"
+        options={{ title: 'Editar plato' }}
+      />
     </Stack>
   );
 }

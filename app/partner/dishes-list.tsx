@@ -21,6 +21,10 @@ type Plato = {
   categoria: string;
   imagen_url: string;
   disponible: number;
+  tiene_descuento?: number;
+  porcentaje_descuento?: number;
+  acepta_domicilio?: number;
+  acepta_reserva?: number;
 };
 
 export default function DishesListScreen() {
@@ -120,12 +124,35 @@ export default function DishesListScreen() {
                 ) : null}
               </View>
 
-              <Pressable
-                style={styles.deleteBtn}
-                onPress={() => confirmDelete(item)}
-              >
-                <Text style={styles.deleteText}>Eliminar</Text>
-              </Pressable>
+              <View style={styles.itemActions}>
+                <Pressable
+                  style={styles.editBtn}
+                  onPress={() => router.push({
+                    pathname: "/partner/edit-dish",
+                    params: {
+                      id: String(item.id),
+                      nombre: item.nombre,
+                      descripcion: item.descripcion ?? "",
+                      precio: String(item.precio),
+                      categoria: item.categoria ?? "",
+                      imagen_url: item.imagen_url ?? "",
+                      disponible: String(item.disponible),
+                      tiene_descuento: String(item.tiene_descuento ?? 0),
+                      porcentaje_descuento: String(item.porcentaje_descuento ?? 0),
+                      acepta_domicilio: String(item.acepta_domicilio ?? 0),
+                      acepta_reserva: String(item.acepta_reserva ?? 0),
+                    },
+                  })}
+                >
+                  <Text style={styles.editText}>Editar</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.deleteBtn}
+                  onPress={() => confirmDelete(item)}
+                >
+                  <Text style={styles.deleteText}>Eliminar</Text>
+                </Pressable>
+              </View>
             </View>
           )}
         />
@@ -178,7 +205,18 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   inactiveText: { fontSize: 11, color: "#999", fontWeight: "600" },
-  deleteBtn: { paddingTop: 2 },
+  itemActions: { gap: 8, alignItems: "flex-end" },
+  editBtn: {
+    minHeight: 36,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: "#f0f0f0",
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  editText: { color: "#333", fontWeight: "600", fontSize: 13 },
+  deleteBtn: { minHeight: 36, paddingHorizontal: 12, paddingVertical: 6, alignItems: "center", justifyContent: "center" },
   deleteText: { color: "#c00", fontWeight: "600", fontSize: 13 },
   button: {
     backgroundColor: "#FF6A00",
