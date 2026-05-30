@@ -1,6 +1,7 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   Pressable,
@@ -9,205 +10,190 @@ import {
   View,
 } from "react-native";
 
-import { Dish } from "./models/Dish";
-import { Restaurant } from "./models/Restaurant";
+import { backendDelete, backendGet } from "../services/backendApi";
 import { authService } from "./services/AuthService";
-import {
-  loadPartnerData,
-  savePartnerData,
-} from "./storage/partnerStorage";
+
+type Plato = {
+  id: number;
+  nombre: string;
+  descripcion: string;
+  precio: number;
+  categoria: string;
+  imagen_url: string;
+  disponible: number;
+};
 
 export default function DishesListScreen() {
   const router = useRouter();
 
-  const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
-  const [dishes, setDishes] = useState<Dish[]>([]);
+  const [platos, setPlatos] = useState<Plato[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useFocusEffect(
     useCallback(() => {
       async function load() {
-        const currentUser = await authService.getCurrentUser();
+        setLoading(true);
 
-        if (!currentUser) {
+        const isLogged = await authService.isLoggedIn();
+        if (!isLogged) {
           router.replace("/partner/auth");
           return;
         }
 
-        const data = await loadPartnerData();
-
-        const myRestaurant =
-          data.restaurants.find((r) => r.userId === currentUser.id) ?? null;
-
-        setRestaurant(myRestaurant);
-
-        if (!myRestaurant) {
-          setDishes([]);
-          return;
+        try {
+          const data = await backendGet<Plato[]>("/partner/platos");
+          setPlatos(data);
+        } catch (e: any) {
+          if (e?.message?.includes("401")) {
+            await authService.logout();
+            router.replace("/partner/auth");
+          }
+        } finally {
+          setLoading(false);
         }
-
-        const myDishes = data.dishes.filter(
-          (dish) => dish.restaurantId === myRestaurant.id
-        );
-
-        setDishes(myDishes);
       }
 
       load();
     }, [router])
   );
 
-  async function handleDelete(dishId: string) {
+  function confirmDelete(plato: Plato) {
     Alert.alert(
       "Eliminar plato",
-      "¿Seguro que deseas eliminar este plato?",
+      `¿Eliminar "${plato.nombre}"?`,
       [
         { text: "Cancelar", style: "cancel" },
         {
           text: "Eliminar",
           style: "destructive",
           onPress: async () => {
-            const data = await loadPartnerData();
-
-            data.dishes = data.dishes.filter((dish) => dish.id !== dishId);
-
-            await savePartnerData(data);
-
-            setDishes((prev) => prev.filter((dish) => dish.id !== dishId));
+            try {
+              await backendDelete(`/partner/platos/${plato.id}`);
+              setPlatos((prev) => prev.filter((p) => p.id !== plato.id));
+            } catch (e: any) {
+              Alert.alert("Error", e?.message ?? "No se pudo eliminar el plato.");
+            }
           },
         },
       ]
     );
   }
 
+  if (loading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color="#FF6A00" />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Mis platos</Text>
+      <Text style={styles.title}>Mis platos ({platos.length})</Text>
 
-      {restaurant ? (
-        <Text style={styles.subtitle}>
-          Restaurante: {restaurant.name}
-        </Text>
+      {platos.length === 0 ? (
+        <Text style={styles.empty}>Aún no tienes platos registrados.</Text>
       ) : (
-        <Text style={styles.empty}>
-          Aún no tienes restaurante registrado.
-        </Text>
-      )}
-
-      {restaurant && dishes.length === 0 ? (
-        <Text style={styles.empty}>
-          No has agregado platos aún.
-        </Text>
-      ) : null}
-
-      {restaurant && dishes.length > 0 ? (
         <FlatList
-          data={dishes}
-          keyExtractor={(item) => item.id}
+          data={platos}
+          keyExtractor={(item) => String(item.id)}
+          contentContainerStyle={{ gap: 10, paddingBottom: 20 }}
           renderItem={({ item }) => (
             <View style={styles.card}>
-              <View>
-                <Text style={styles.name}>{item.name}</Text>
-                <Text style={styles.price}>${item.price}</Text>
+              <View style={styles.cardBody}>
+                <View style={styles.row}>
+                  <Text style={styles.name}>{item.nombre}</Text>
+                  {item.disponible === 0 && (
+                    <View style={styles.inactiveBadge}>
+                      <Text style={styles.inactiveText}>Inactivo</Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={styles.categoria}>{item.categoria}</Text>
+                <Text style={styles.price}>
+                  ${item.precio.toLocaleString("es-CO")}
+                </Text>
+                {item.descripcion ? (
+                  <Text style={styles.desc} numberOfLines={2}>
+                    {item.descripcion}
+                  </Text>
+                ) : null}
               </View>
 
-              <Pressable onPress={() => handleDelete(item.id)}>
-                <Text style={styles.delete}>Eliminar</Text>
+              <Pressable
+                style={styles.deleteBtn}
+                onPress={() => confirmDelete(item)}
+              >
+                <Text style={styles.deleteText}>Eliminar</Text>
               </Pressable>
             </View>
           )}
         />
-      ) : null}
-
-      {restaurant ? (
-        <Pressable
-          style={styles.button}
-          onPress={() =>
-            router.push({
-              pathname: "/partner/add-dish",
-              params: { restaurantId: restaurant.id },
-            })
-          }
-        >
-          <Text style={styles.buttonText}>Agregar plato</Text>
-        </Pressable>
-      ) : (
-        <Pressable
-          style={styles.button}
-          onPress={() => router.push("/partner/restaurant-form")}
-        >
-          <Text style={styles.buttonText}>Registrar restaurante</Text>
-        </Pressable>
       )}
 
       <Pressable
-        style={styles.secondaryButton}
-        onPress={() => router.back()}
+        style={styles.button}
+        onPress={() => router.push("/partner/add-dish")}
       >
-        <Text style={styles.secondaryButtonText}>
-          Volver al panel
-        </Text>
+        <Text style={styles.buttonText}>+ Agregar plato</Text>
+      </Pressable>
+
+      <Pressable style={styles.secondaryButton} onPress={() => router.back()}>
+        <Text style={styles.secondaryText}>Volver al panel</Text>
       </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 24,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: "600",
-    marginBottom: 8,
-  },
-  subtitle: {
-    color: "#666",
-    marginBottom: 16,
-  },
-  empty: {
-    color: "#666",
-    marginBottom: 20,
-  },
+  centered: { flex: 1, justifyContent: "center", alignItems: "center" },
+  container: { flex: 1, padding: 24 },
+  title: { fontSize: 20, fontWeight: "700", marginBottom: 16 },
+  empty: { color: "#888", marginBottom: 20, fontSize: 14 },
   card: {
-    padding: 14,
-    borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#ddd",
-    marginBottom: 12,
+    borderColor: "#eee",
+    borderRadius: 10,
+    padding: 14,
+    backgroundColor: "#fafafa",
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  cardBody: { flex: 1 },
+  row: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    marginBottom: 2,
   },
-  name: {
-    fontWeight: "600",
+  name: { fontWeight: "700", fontSize: 15, flex: 1, color: "#111" },
+  categoria: { fontSize: 12, color: "#888", marginBottom: 2 },
+  price: { fontSize: 14, fontWeight: "700", color: "#FF6A00", marginBottom: 4 },
+  desc: { fontSize: 12, color: "#666", lineHeight: 17 },
+  inactiveBadge: {
+    backgroundColor: "#f0f0f0",
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
   },
-  price: {
-    color: "#444",
-  },
-  delete: {
-    color: "#c00",
-    fontWeight: "600",
-  },
+  inactiveText: { fontSize: 11, color: "#999", fontWeight: "600" },
+  deleteBtn: { paddingTop: 2 },
+  deleteText: { color: "#c00", fontWeight: "600", fontSize: 13 },
   button: {
     backgroundColor: "#FF6A00",
     padding: 14,
-    borderRadius: 8,
+    borderRadius: 10,
     alignItems: "center",
-    marginTop: 10,
+    marginTop: 12,
   },
-  buttonText: {
-    color: "#fff",
-    fontWeight: "600",
-  },
+  buttonText: { color: "#fff", fontWeight: "700" },
   secondaryButton: {
-    padding: 14,
-    borderRadius: 8,
-    alignItems: "center",
     backgroundColor: "#eee",
-    marginTop: 10,
+    padding: 14,
+    borderRadius: 10,
+    alignItems: "center",
+    marginTop: 8,
   },
-  secondaryButtonText: {
-    fontWeight: "600",
-  },
+  secondaryText: { fontWeight: "600", color: "#333" },
 });

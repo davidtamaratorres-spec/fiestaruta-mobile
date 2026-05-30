@@ -1,4 +1,3 @@
-import * as Crypto from "expo-crypto";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
@@ -10,61 +9,51 @@ import {
   TextInput,
 } from "react-native";
 
-import { Restaurant } from "./models/Restaurant";
+import { backendPut } from "../services/backendApi";
 import { authService } from "./services/AuthService";
-import { saveRestaurant } from "./storage/partnerStorage";
 
 export default function RestaurantFormScreen() {
   const router = useRouter();
 
-  const [name, setName] = useState("");
-  const [city, setCity] = useState("");
+  const [nombre, setNombre] = useState("");
+  const [ciudad, setCiudad] = useState("");
+  const [direccion, setDireccion] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
-  const [promo, setPromo] = useState("");
   const [saving, setSaving] = useState(false);
 
   async function handleSave() {
     if (saving) return;
 
-    if (!name.trim() || !city.trim()) {
-      Alert.alert("Datos incompletos", "Nombre y ciudad son obligatorios.");
+    if (!nombre.trim() || !ciudad.trim() || !whatsapp.trim()) {
+      Alert.alert("Datos incompletos", "Nombre, ciudad y WhatsApp son obligatorios.");
+      return;
+    }
+
+    const isLogged = await authService.isLoggedIn();
+    if (!isLogged) {
+      router.replace("/partner/auth");
       return;
     }
 
     setSaving(true);
-
     try {
-      const currentUser = await authService.getCurrentUser();
+      await backendPut("/partner/restaurante", {
+        nombre: nombre.trim(),
+        ciudad: ciudad.trim(),
+        direccion: direccion.trim(),
+        whatsapp: whatsapp.trim(),
+      });
 
-      if (!currentUser) {
-        Alert.alert(
-          "Sesión requerida",
-          "Debes iniciar sesión antes de registrar un restaurante."
-        );
+      Alert.alert("Restaurante actualizado", "Los datos fueron guardados correctamente.", [
+        { text: "OK", onPress: () => router.replace("/partner/home") },
+      ]);
+    } catch (e: any) {
+      if (e?.message?.includes("401")) {
+        await authService.logout();
         router.replace("/partner/auth");
         return;
       }
-
-      const restaurant: Restaurant = {
-        id: Crypto.randomUUID(),
-        userId: currentUser.id,
-        name: name.trim(),
-        city: city.trim(),
-        whatsapp: whatsapp.trim(),
-        promo: promo.trim(),
-        createdAt: new Date().toISOString(),
-      };
-
-      await saveRestaurant(restaurant);
-
-      Alert.alert("Restaurante guardado", "El restaurante quedó asociado a tu cuenta.", [
-        {
-          text: "OK",
-          onPress: () => router.replace("/partner/home"),
-        },
-      ]);
-    } catch (error: any) {
-      Alert.alert("Error", error?.message ?? "No se pudo guardar el restaurante.");
+      Alert.alert("Error", e?.message ?? "No se pudo guardar el restaurante.");
     } finally {
       setSaving(false);
     }
@@ -72,36 +61,39 @@ export default function RestaurantFormScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Registrar restaurante</Text>
+      <Text style={styles.title}>Editar restaurante</Text>
 
+      <Text style={styles.label}>Nombre</Text>
       <TextInput
         placeholder="Nombre del restaurante"
         style={styles.input}
-        value={name}
-        onChangeText={setName}
+        value={nombre}
+        onChangeText={setNombre}
       />
 
+      <Text style={styles.label}>Ciudad</Text>
       <TextInput
         placeholder="Ciudad"
         style={styles.input}
-        value={city}
-        onChangeText={setCity}
+        value={ciudad}
+        onChangeText={setCiudad}
       />
 
+      <Text style={styles.label}>Dirección</Text>
       <TextInput
-        placeholder="WhatsApp"
+        placeholder="Dirección (opcional)"
+        style={styles.input}
+        value={direccion}
+        onChangeText={setDireccion}
+      />
+
+      <Text style={styles.label}>WhatsApp</Text>
+      <TextInput
+        placeholder="+57 300 000 0000"
         style={styles.input}
         value={whatsapp}
         onChangeText={setWhatsapp}
         keyboardType="phone-pad"
-      />
-
-      <TextInput
-        placeholder="Promoción o beneficio"
-        style={[styles.input, styles.textarea]}
-        value={promo}
-        onChangeText={setPromo}
-        multiline
       />
 
       <Pressable
@@ -110,31 +102,28 @@ export default function RestaurantFormScreen() {
         disabled={saving}
       >
         <Text style={styles.buttonText}>
-          {saving ? "Guardando..." : "Guardar restaurante"}
+          {saving ? "Guardando..." : "Guardar cambios"}
         </Text>
+      </Pressable>
+
+      <Pressable style={styles.secondaryButton} onPress={() => router.back()}>
+        <Text style={styles.secondaryText}>Cancelar</Text>
       </Pressable>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 24,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: "600",
-    marginBottom: 16,
-  },
+  container: { padding: 24, paddingBottom: 40 },
+  title: { fontSize: 22, fontWeight: "700", marginBottom: 20 },
+  label: { fontSize: 13, color: "#666", marginBottom: 4, fontWeight: "600" },
   input: {
     borderWidth: 1,
     borderColor: "#ddd",
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
-  },
-  textarea: {
-    height: 90,
+    borderRadius: 10,
+    padding: 13,
+    marginBottom: 14,
+    backgroundColor: "#fafafa",
   },
   button: {
     backgroundColor: "#FF6A00",
@@ -143,11 +132,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 8,
   },
-  buttonDisabled: {
-    opacity: 0.5,
+  buttonDisabled: { opacity: 0.5 },
+  buttonText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+  secondaryButton: {
+    backgroundColor: "#eee",
+    padding: 14,
+    borderRadius: 10,
+    alignItems: "center",
+    marginTop: 10,
   },
-  buttonText: {
-    color: "#fff",
-    fontWeight: "600",
-  },
+  secondaryText: { fontWeight: "600", color: "#333" },
 });

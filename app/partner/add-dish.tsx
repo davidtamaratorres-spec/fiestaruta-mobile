@@ -1,6 +1,5 @@
-import * as Crypto from "expo-crypto";
 import * as ImagePicker from "expo-image-picker";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
   Alert,
@@ -17,37 +16,31 @@ import {
   View,
 } from "react-native";
 
-import { createBackendDish } from "../services/backendDishes";
-import { Dish } from "./models/Dish";
+import { backendPost } from "../services/backendApi";
 import { authService } from "./services/AuthService";
-import { addDish, loadPartnerData } from "./storage/partnerStorage";
 
 export default function AddDishScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams();
 
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
+  const [categoria, setCategoria] = useState("");
   const [available, setAvailable] = useState(true);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   async function pickImage() {
     Keyboard.dismiss();
-
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-
     if (!permission.granted) {
       Alert.alert("Permiso requerido", "Se necesita permiso para acceder a tus fotos.");
       return;
     }
-
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.7,
     });
-
     if (!result.canceled) {
       setImageUri(result.assets[0].uri);
     }
@@ -55,7 +48,6 @@ export default function AddDishScreen() {
 
   async function handleSave() {
     Keyboard.dismiss();
-
     if (saving) return;
 
     if (!name.trim() || !price.trim()) {
@@ -64,77 +56,38 @@ export default function AddDishScreen() {
     }
 
     const precioNum = Number(price);
-
     if (Number.isNaN(precioNum) || precioNum < 0) {
       Alert.alert("Precio inválido", "Ingresa un precio numérico válido.");
       return;
     }
 
+    const isLogged = await authService.isLoggedIn();
+    if (!isLogged) {
+      router.replace("/partner/auth");
+      return;
+    }
+
     setSaving(true);
-
     try {
-      const currentUser = await authService.getCurrentUser();
+      await backendPost("/partner/platos", {
+        nombre: name.trim(),
+        descripcion: description.trim(),
+        precio: precioNum,
+        categoria: categoria.trim() || "General",
+        imagen_url: imageUri || "",
+        disponible: available ? 1 : 0,
+      });
 
-      if (!currentUser) {
-        Alert.alert("Sesión requerida", "Debes iniciar sesión para agregar platos.");
+      Alert.alert("Plato guardado", "El plato fue agregado a tu restaurante.", [
+        { text: "OK", onPress: () => router.replace("/partner/home") },
+      ]);
+    } catch (e: any) {
+      if (e?.message?.includes("401")) {
+        await authService.logout();
         router.replace("/partner/auth");
         return;
       }
-
-      const data = await loadPartnerData();
-
-      const restaurantIdFromParams =
-        typeof params.restaurantId === "string" ? params.restaurantId : "";
-
-      const restaurant =
-        data.restaurants.find(
-          (r) => r.id === restaurantIdFromParams && r.userId === currentUser.id
-        ) ??
-        data.restaurants.find((r) => r.userId === currentUser.id);
-
-      if (!restaurant) {
-        Alert.alert(
-          "No hay restaurante",
-          "Primero registra tu restaurante antes de agregar platos."
-        );
-        router.replace("/partner/home");
-        return;
-      }
-
-      const newDish: Dish = {
-        id: Crypto.randomUUID(),
-        restaurantId: restaurant.id,
-        name: name.trim(),
-        price: precioNum,
-        description: description.trim(),
-        available,
-        imageUri: imageUri || undefined,
-      };
-
-      await addDish(newDish);
-
-      const idCandidate = Number((restaurant as any).id);
-
-      if (Number.isFinite(idCandidate)) {
-        await createBackendDish({
-          restaurante_id: idCandidate,
-          nombre: name.trim(),
-          descripcion: description.trim(),
-          precio: precioNum,
-          categoria: "General",
-          imagen_url: "",
-          disponible: available ? 1 : 0,
-        });
-      }
-
-      Alert.alert("Plato guardado", "El plato quedó asociado a tu restaurante.", [
-        {
-          text: "OK",
-          onPress: () => router.replace("/partner/home"),
-        },
-      ]);
-    } catch (e: any) {
-      Alert.alert("Error", e?.message ?? String(e));
+      Alert.alert("Error", e?.message ?? "No se pudo guardar el plato.");
     } finally {
       setSaving(false);
     }
@@ -161,7 +114,7 @@ export default function AddDishScreen() {
         />
 
         <TextInput
-          placeholder="Precio"
+          placeholder="Precio (ej: 25000)"
           style={styles.input}
           keyboardType="numeric"
           value={price}
@@ -178,9 +131,22 @@ export default function AddDishScreen() {
           multiline
         />
 
+        <TextInput
+          placeholder="Categoría (ej: Sopas, Carnes, Típico)"
+          style={styles.input}
+          value={categoria}
+          onChangeText={setCategoria}
+          returnKeyType="done"
+          onSubmitEditing={Keyboard.dismiss}
+        />
+
         <View style={styles.switchRow}>
-          <Text>Disponible</Text>
-          <Switch value={available} onValueChange={setAvailable} />
+          <Text style={styles.switchLabel}>Disponible</Text>
+          <Switch
+            value={available}
+            onValueChange={setAvailable}
+            trackColor={{ true: "#FF6A00" }}
+          />
         </View>
 
         <Pressable style={styles.imagePicker} onPress={pickImage}>
@@ -189,7 +155,9 @@ export default function AddDishScreen() {
           </Text>
         </Pressable>
 
-        {imageUri && <Image source={{ uri: imageUri }} style={styles.preview} />}
+        {imageUri && (
+          <Image source={{ uri: imageUri }} style={styles.preview} />
+        )}
 
         <Pressable
           style={[styles.button, saving && styles.buttonDisabled]}
@@ -206,39 +174,32 @@ export default function AddDishScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 24,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: "600",
-    marginBottom: 16,
-  },
+  container: { padding: 24, paddingBottom: 40 },
+  title: { fontSize: 22, fontWeight: "700", marginBottom: 18 },
   input: {
     borderWidth: 1,
     borderColor: "#ddd",
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: 10,
+    padding: 13,
     marginBottom: 12,
+    backgroundColor: "#fafafa",
   },
-  textarea: {
-    height: 80,
-  },
+  textarea: { height: 90, textAlignVertical: "top" },
   switchRow: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 16,
   },
+  switchLabel: { fontSize: 15, color: "#333" },
   imagePicker: {
     backgroundColor: "#eee",
     padding: 14,
-    borderRadius: 8,
+    borderRadius: 10,
     alignItems: "center",
     marginBottom: 12,
   },
-  imagePickerText: {
-    fontWeight: "600",
-  },
+  imagePickerText: { fontWeight: "600", color: "#333" },
   preview: {
     width: "100%",
     height: 180,
@@ -250,13 +211,9 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 10,
     alignItems: "center",
+    marginTop: 8,
     marginBottom: 30,
   },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  buttonText: {
-    color: "#fff",
-    fontWeight: "600",
-  },
+  buttonDisabled: { opacity: 0.5 },
+  buttonText: { color: "#fff", fontWeight: "700", fontSize: 15 },
 });
