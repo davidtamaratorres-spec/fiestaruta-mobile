@@ -55,6 +55,7 @@ const SAVE_OPTIONS = {
   format: ImageManipulator.SaveFormat.JPEG,
   base64: true,
 };
+const MIN_CROP_SIZE = 50;
 
 export default function MenuIaScreen() {
   const router = useRouter();
@@ -69,7 +70,8 @@ export default function MenuIaScreen() {
   const [platos, setPlatos] = useState<ExtractedDish[]>([]);
   const [extracting, setExtracting] = useState(false);
   const [saving, setSaving] = useState(false);
-  const cropStartRef = useRef<{ rect: Rect; mode: "move" | "resize" } | null>(null);
+  const moveStartRef = useRef<Rect | null>(null);
+  const resizeStartRef = useRef<Rect | null>(null);
 
   const displayedImageRect = useMemo(() => {
     if (!image || previewSize.width <= 0 || previewSize.height <= 0) {
@@ -87,20 +89,8 @@ export default function MenuIaScreen() {
     };
   }, [image, previewSize.height, previewSize.width]);
 
-  const clampCropRect = useCallback((start: Rect, dx: number, dy: number, mode: "move" | "resize") => {
+  const clampMoveRect = useCallback((start: Rect, dx: number, dy: number) => {
     const frame = displayedImageRect;
-    const minSize = 72;
-
-    if (mode === "resize") {
-      const maxWidth = frame.x + frame.width - start.x;
-      const maxHeight = frame.y + frame.height - start.y;
-      return {
-        ...start,
-        width: Math.max(minSize, Math.min(maxWidth, start.width + dx)),
-        height: Math.max(minSize, Math.min(maxHeight, start.height + dy)),
-      };
-    }
-
     return {
       ...start,
       x: Math.max(frame.x, Math.min(frame.x + frame.width - start.width, start.x + dx)),
@@ -108,35 +98,67 @@ export default function MenuIaScreen() {
     };
   }, [displayedImageRect]);
 
-  const cropResponder = useMemo(
+  const clampResizeRect = useCallback((start: Rect, dx: number, dy: number) => {
+    const frame = displayedImageRect;
+    const maxWidth = frame.x + frame.width - start.x;
+    const maxHeight = frame.y + frame.height - start.y;
+    return {
+      ...start,
+      width: Math.max(MIN_CROP_SIZE, Math.min(maxWidth, start.width + dx)),
+      height: Math.max(MIN_CROP_SIZE, Math.min(maxHeight, start.height + dy)),
+    };
+  }, [displayedImageRect]);
+
+  const moveResponder = useMemo(
     () =>
       PanResponder.create({
         onStartShouldSetPanResponder: () => cropMode,
         onMoveShouldSetPanResponder: () => cropMode,
-        onPanResponderGrant: (evt) => {
+        onStartShouldSetPanResponderCapture: () => cropMode,
+        onMoveShouldSetPanResponderCapture: () => cropMode,
+        onPanResponderGrant: () => {
           if (!cropRect) return;
-          const touchX = evt.nativeEvent.locationX;
-          const touchY = evt.nativeEvent.locationY;
-          const nearRight = touchX > cropRect.width - 48;
-          const nearBottom = touchY > cropRect.height - 48;
-          cropStartRef.current = {
-            rect: cropRect,
-            mode: nearRight && nearBottom ? "resize" : "move",
-          };
+          moveStartRef.current = cropRect;
         },
         onPanResponderMove: (_evt, gesture) => {
-          const start = cropStartRef.current;
+          const start = moveStartRef.current;
           if (!start) return;
-          setCropRect(clampCropRect(start.rect, gesture.dx, gesture.dy, start.mode));
+          setCropRect(clampMoveRect(start, gesture.dx, gesture.dy));
         },
         onPanResponderRelease: () => {
-          cropStartRef.current = null;
+          moveStartRef.current = null;
         },
         onPanResponderTerminate: () => {
-          cropStartRef.current = null;
+          moveStartRef.current = null;
         },
       }),
-    [clampCropRect, cropMode, cropRect]
+    [clampMoveRect, cropMode, cropRect]
+  );
+
+  const resizeResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => cropMode,
+        onMoveShouldSetPanResponder: () => cropMode,
+        onStartShouldSetPanResponderCapture: () => cropMode,
+        onMoveShouldSetPanResponderCapture: () => cropMode,
+        onPanResponderGrant: () => {
+          if (!cropRect) return;
+          resizeStartRef.current = cropRect;
+        },
+        onPanResponderMove: (_evt, gesture) => {
+          const start = resizeStartRef.current;
+          if (!start) return;
+          setCropRect(clampResizeRect(start, gesture.dx, gesture.dy));
+        },
+        onPanResponderRelease: () => {
+          resizeStartRef.current = null;
+        },
+        onPanResponderTerminate: () => {
+          resizeStartRef.current = null;
+        },
+      }),
+    [clampResizeRect, cropMode, cropRect]
   );
 
   function resetResult() {
@@ -427,7 +449,6 @@ export default function MenuIaScreen() {
             ) : null}
             {cropMode && cropRect ? (
               <View
-                {...cropResponder.panHandlers}
                 style={[
                   styles.cropRect,
                   {
@@ -438,7 +459,10 @@ export default function MenuIaScreen() {
                   },
                 ]}
               >
-                <View style={styles.resizeHandle} />
+                <View style={styles.cropMoveArea} {...moveResponder.panHandlers}>
+                  <Text style={styles.cropMoveText}>Mover</Text>
+                </View>
+                <View style={styles.resizeHandle} {...resizeResponder.panHandlers} />
               </View>
             ) : null}
           </View>
@@ -592,13 +616,31 @@ const styles = StyleSheet.create({
     borderColor: "#FF6A00",
     backgroundColor: "rgba(255,255,255,0.08)",
   },
+  cropMoveArea: {
+    position: "absolute",
+    left: 0,
+    right: 32,
+    top: 0,
+    bottom: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cropMoveText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "800",
+    backgroundColor: "rgba(0,0,0,0.35)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
   resizeHandle: {
     position: "absolute",
-    right: -2,
-    bottom: -2,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    right: -10,
+    bottom: -10,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: "#FF6A00",
     borderWidth: 3,
     borderColor: "#fff",
