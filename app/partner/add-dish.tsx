@@ -30,6 +30,11 @@ export default function AddDishScreen() {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  const [tieneDescuento, setTieneDescuento] = useState(false);
+  const [porcentajeDescuento, setPorcentajeDescuento] = useState("");
+  const [aceptaDomicilio, setAceptaDomicilio] = useState(false);
+  const [aceptaReserva, setAceptaReserva] = useState(false);
+
   async function pickImage() {
     Keyboard.dismiss();
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -41,9 +46,7 @@ export default function AddDishScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.7,
     });
-    if (!result.canceled) {
-      setImageUri(result.assets[0].uri);
-    }
+    if (!result.canceled) setImageUri(result.assets[0].uri);
   }
 
   async function handleSave() {
@@ -54,18 +57,21 @@ export default function AddDishScreen() {
       Alert.alert("Datos incompletos", "Nombre y precio son obligatorios.");
       return;
     }
-
     const precioNum = Number(price);
     if (Number.isNaN(precioNum) || precioNum < 0) {
       Alert.alert("Precio inválido", "Ingresa un precio numérico válido.");
       return;
     }
+    if (tieneDescuento) {
+      const pct = Number(porcentajeDescuento);
+      if (Number.isNaN(pct) || pct < 1 || pct > 100) {
+        Alert.alert("Descuento inválido", "El porcentaje debe estar entre 1 y 100.");
+        return;
+      }
+    }
 
     const isLogged = await authService.isLoggedIn();
-    if (!isLogged) {
-      router.replace("/partner/auth");
-      return;
-    }
+    if (!isLogged) { router.replace("/partner/auth"); return; }
 
     setSaving(true);
     try {
@@ -76,17 +82,17 @@ export default function AddDishScreen() {
         categoria: categoria.trim() || "General",
         imagen_url: imageUri || "",
         disponible: available ? 1 : 0,
+        tiene_descuento: tieneDescuento ? 1 : 0,
+        porcentaje_descuento: tieneDescuento ? Number(porcentajeDescuento) : 0,
+        acepta_domicilio: aceptaDomicilio ? 1 : 0,
+        acepta_reserva: aceptaReserva ? 1 : 0,
       });
 
       Alert.alert("Plato guardado", "El plato fue agregado a tu restaurante.", [
         { text: "OK", onPress: () => router.replace("/partner/home") },
       ]);
     } catch (e: any) {
-      if (e?.message?.includes("401")) {
-        await authService.logout();
-        router.replace("/partner/auth");
-        return;
-      }
+      if (e?.message?.includes("401")) { await authService.logout(); router.replace("/partner/auth"); return; }
       Alert.alert("Error", e?.message ?? "No se pudo guardar el plato.");
     } finally {
       setSaving(false);
@@ -94,79 +100,66 @@ export default function AddDishScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <ScrollView
-        contentContainerStyle={styles.container}
-        keyboardShouldPersistTaps="handled"
-      >
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>Agregar plato</Text>
 
-        <TextInput
-          placeholder="Nombre del plato"
-          style={styles.input}
-          value={name}
-          onChangeText={setName}
-          returnKeyType="done"
-          onSubmitEditing={Keyboard.dismiss}
-        />
-
-        <TextInput
-          placeholder="Precio (ej: 25000)"
-          style={styles.input}
-          keyboardType="numeric"
-          value={price}
-          onChangeText={setPrice}
-          returnKeyType="done"
-          onSubmitEditing={Keyboard.dismiss}
-        />
-
-        <TextInput
-          placeholder="Descripción"
-          style={[styles.input, styles.textarea]}
-          value={description}
-          onChangeText={setDescription}
-          multiline
-        />
-
-        <TextInput
-          placeholder="Categoría (ej: Sopas, Carnes, Típico)"
-          style={styles.input}
-          value={categoria}
-          onChangeText={setCategoria}
-          returnKeyType="done"
-          onSubmitEditing={Keyboard.dismiss}
-        />
+        <TextInput placeholder="Nombre del plato" style={styles.input} value={name} onChangeText={setName} returnKeyType="done" onSubmitEditing={Keyboard.dismiss} />
+        <TextInput placeholder="Precio (ej: 25000)" style={styles.input} keyboardType="numeric" value={price} onChangeText={setPrice} returnKeyType="done" onSubmitEditing={Keyboard.dismiss} />
+        <TextInput placeholder="Descripción" style={[styles.input, styles.textarea]} value={description} onChangeText={setDescription} multiline />
+        <TextInput placeholder="Categoría (ej: Sopas, Carnes, Típico)" style={styles.input} value={categoria} onChangeText={setCategoria} returnKeyType="done" onSubmitEditing={Keyboard.dismiss} />
 
         <View style={styles.switchRow}>
           <Text style={styles.switchLabel}>Disponible</Text>
-          <Switch
-            value={available}
-            onValueChange={setAvailable}
-            trackColor={{ true: "#FF6A00" }}
-          />
+          <Switch value={available} onValueChange={setAvailable} trackColor={{ true: "#FF6A00" }} />
         </View>
 
-        <Pressable style={styles.imagePicker} onPress={pickImage}>
-          <Text style={styles.imagePickerText}>
-            {imageUri ? "Cambiar foto" : "Agregar foto del plato"}
-          </Text>
-        </Pressable>
+        <View style={styles.divider} />
 
-        {imageUri && (
-          <Image source={{ uri: imageUri }} style={styles.preview} />
+        <View style={styles.switchRow}>
+          <View style={styles.switchInfo}>
+            <Text style={styles.switchLabel}>💸 Tiene descuento</Text>
+            <Text style={styles.switchSub}>Muestra badge PROMO en la app</Text>
+          </View>
+          <Switch value={tieneDescuento} onValueChange={setTieneDescuento} trackColor={{ true: "#FF6A00" }} />
+        </View>
+        {tieneDescuento && (
+          <TextInput
+            placeholder="Porcentaje de descuento (ej: 20)"
+            style={styles.input}
+            keyboardType="numeric"
+            value={porcentajeDescuento}
+            onChangeText={setPorcentajeDescuento}
+            returnKeyType="done"
+            onSubmitEditing={Keyboard.dismiss}
+          />
         )}
 
-        <Pressable
-          style={[styles.button, saving && styles.buttonDisabled]}
-          onPress={handleSave}
-          disabled={saving}
-        >
-          <Text style={styles.buttonText}>
-            {saving ? "Guardando..." : "Guardar plato"}
-          </Text>
+        <View style={styles.switchRow}>
+          <View style={styles.switchInfo}>
+            <Text style={styles.switchLabel}>🛵 Acepta domicilio</Text>
+            <Text style={styles.switchSub}>Muestra botón Domicilio en la app</Text>
+          </View>
+          <Switch value={aceptaDomicilio} onValueChange={setAceptaDomicilio} trackColor={{ true: "#FF6A00" }} />
+        </View>
+
+        <View style={styles.switchRow}>
+          <View style={styles.switchInfo}>
+            <Text style={styles.switchLabel}>📅 Acepta reserva</Text>
+            <Text style={styles.switchSub}>Muestra botón Reservar en la app</Text>
+          </View>
+          <Switch value={aceptaReserva} onValueChange={setAceptaReserva} trackColor={{ true: "#FF6A00" }} />
+        </View>
+
+        <View style={styles.divider} />
+
+        <Pressable style={styles.imagePicker} onPress={pickImage}>
+          <Text style={styles.imagePickerText}>{imageUri ? "Cambiar foto" : "Agregar foto del plato"}</Text>
+        </Pressable>
+        {imageUri && <Image source={{ uri: imageUri }} style={styles.preview} />}
+
+        <Pressable style={[styles.button, saving && styles.buttonDisabled]} onPress={handleSave} disabled={saving}>
+          <Text style={styles.buttonText}>{saving ? "Guardando..." : "Guardar plato"}</Text>
         </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -176,44 +169,17 @@ export default function AddDishScreen() {
 const styles = StyleSheet.create({
   container: { padding: 24, paddingBottom: 40 },
   title: { fontSize: 22, fontWeight: "700", marginBottom: 18 },
-  input: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 10,
-    padding: 13,
-    marginBottom: 12,
-    backgroundColor: "#fafafa",
-  },
+  input: { borderWidth: 1, borderColor: "#ddd", borderRadius: 10, padding: 13, marginBottom: 12, backgroundColor: "#fafafa" },
   textarea: { height: 90, textAlignVertical: "top" },
-  switchRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  switchLabel: { fontSize: 15, color: "#333" },
-  imagePicker: {
-    backgroundColor: "#eee",
-    padding: 14,
-    borderRadius: 10,
-    alignItems: "center",
-    marginBottom: 12,
-  },
+  switchRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
+  switchInfo: { flex: 1, marginRight: 12 },
+  switchLabel: { fontSize: 15, color: "#111", fontWeight: "500" },
+  switchSub: { fontSize: 12, color: "#888", marginTop: 2 },
+  divider: { height: 1, backgroundColor: "#eee", marginVertical: 12 },
+  imagePicker: { backgroundColor: "#eee", padding: 14, borderRadius: 10, alignItems: "center", marginBottom: 12 },
   imagePickerText: { fontWeight: "600", color: "#333" },
-  preview: {
-    width: "100%",
-    height: 180,
-    borderRadius: 10,
-    marginBottom: 16,
-  },
-  button: {
-    backgroundColor: "#FF6A00",
-    padding: 16,
-    borderRadius: 10,
-    alignItems: "center",
-    marginTop: 8,
-    marginBottom: 30,
-  },
+  preview: { width: "100%", height: 180, borderRadius: 10, marginBottom: 16 },
+  button: { backgroundColor: "#FF6A00", padding: 16, borderRadius: 10, alignItems: "center", marginTop: 8, marginBottom: 30 },
   buttonDisabled: { opacity: 0.5 },
   buttonText: { color: "#fff", fontWeight: "700", fontSize: 15 },
 });

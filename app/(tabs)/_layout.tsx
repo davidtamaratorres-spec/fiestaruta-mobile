@@ -1,6 +1,6 @@
 import { Tabs, useRouter } from 'expo-router';
 import React from 'react';
-import { Pressable, Text } from 'react-native';
+import { Pressable, StyleSheet, Text } from 'react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -29,9 +29,9 @@ export default function TabLayout() {
           headerRight: () => (
             <Pressable
               onPress={() => router.push('/partner')}
-              style={{ marginRight: 16 }}
+              style={tabStyles.sociosBtn}
             >
-              <Text style={{ fontSize: 20 }}>⋮</Text>
+              <Text style={tabStyles.sociosBtnText}>Socios</Text>
             </Pressable>
           ),
         }}
@@ -49,3 +49,21 @@ export default function TabLayout() {
     </Tabs>
   );
 }
+
+const tabStyles = StyleSheet.create({
+  sociosBtn: {
+    minWidth: 72,
+    minHeight: 48,
+    marginRight: 12,
+    backgroundColor: "#FF6A00",
+    borderRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 14,
+  },
+  sociosBtnText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 14,
+  },
+});

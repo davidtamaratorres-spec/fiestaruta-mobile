@@ -10,6 +10,10 @@ export type BackendDish = {
   categoria?: string;
   imagen_url?: string;
   disponible: number;
+  tiene_descuento?: number;
+  porcentaje_descuento?: number;
+  acepta_domicilio?: number;
+  acepta_reserva?: number;
   ciudad?: string;
   municipio?: string;
   departamento?: string;

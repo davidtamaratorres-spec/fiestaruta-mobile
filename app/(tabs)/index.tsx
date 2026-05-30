@@ -39,6 +39,10 @@ type DishItem = {
   restaurantName: string;
   city: string;
   hasDiscount: boolean;
+  tieneDescuento: boolean;
+  porcentajeDescuento: number;
+  aceptaDomicilio: boolean;
+  aceptaReserva: boolean;
   imageUrl?: string;
   imageUri?: string;
   source: "backend" | "local";
@@ -149,6 +153,7 @@ function dishToItem(
   discountSet: Set<number>
 ): DishItem {
   const rid = Number(d.restaurante_id);
+  const tieneDescuento = Boolean(d.tiene_descuento);
   return {
     dishId: String(d.id),
     name: d.nombre,
@@ -156,7 +161,11 @@ function dishToItem(
     restaurantId: String(rid),
     restaurantName: rmap.get(rid) ?? d.restaurante ?? `Restaurante #${d.restaurante_id}`,
     city: d.municipio || d.ciudad || "",
-    hasDiscount: discountSet.has(rid),
+    hasDiscount: discountSet.has(rid) || tieneDescuento,
+    tieneDescuento,
+    porcentajeDescuento: Number(d.porcentaje_descuento) || 0,
+    aceptaDomicilio: Boolean(d.acepta_domicilio),
+    aceptaReserva: Boolean(d.acepta_reserva),
     imageUrl: d.imagen_url || "",
     source: "backend",
   };
@@ -216,6 +225,10 @@ export default function HomeScreen() {
           restaurantName: d.restaurantName || "Restaurante local",
           city: d.city || "",
           hasDiscount: Boolean(d.promo),
+          tieneDescuento: false,
+          porcentajeDescuento: 0,
+          aceptaDomicilio: false,
+          aceptaReserva: false,
           imageUri: d.imageUri,
           source: "local" as const,
         }));
@@ -351,15 +364,46 @@ export default function HomeScreen() {
                 <View style={styles.cardBody}>
                   <View style={styles.row}>
                     <Text style={styles.name}>{item.name}</Text>
-                    {item.hasDiscount && (
+                    {item.tieneDescuento && (
                       <View style={styles.badge}>
-                        <Text style={styles.badgeText}>Promo</Text>
+                        <Text style={styles.badgeText}>
+                          {item.porcentajeDescuento > 0 ? `${item.porcentajeDescuento}% OFF` : "PROMO"}
+                        </Text>
                       </View>
                     )}
                   </View>
                   <Text style={styles.sub}>{item.restaurantName}</Text>
-                  <Text style={styles.price}>${item.price.toLocaleString("es-CO")}</Text>
+                  <View style={styles.priceRow}>
+                    <Text style={styles.price}>${item.price.toLocaleString("es-CO")}</Text>
+                    {item.tieneDescuento && item.porcentajeDescuento > 0 && (
+                      <Text style={styles.priceOriginal}>
+                        ${Math.round(item.price / (1 - item.porcentajeDescuento / 100)).toLocaleString("es-CO")}
+                      </Text>
+                    )}
+                  </View>
                   <Text style={styles.city}>{item.city}</Text>
+                  {(item.aceptaDomicilio || item.aceptaReserva) && (
+                    <View style={styles.actionsRow}>
+                      {item.aceptaDomicilio && (
+                        <Pressable
+                          style={styles.actionBtn}
+                          onPress={(e) => { e.stopPropagation(); openDish(item); }}
+                          hitSlop={8}
+                        >
+                          <Text style={styles.actionBtnText}>🛵 Domicilio</Text>
+                        </Pressable>
+                      )}
+                      {item.aceptaReserva && (
+                        <Pressable
+                          style={[styles.actionBtn, styles.reservaBtn]}
+                          onPress={(e) => { e.stopPropagation(); openDish(item); }}
+                          hitSlop={8}
+                        >
+                          <Text style={[styles.actionBtnText, styles.reservaBtnText]}>📅 Reservar</Text>
+                        </Pressable>
+                      )}
+                    </View>
+                  )}
                   {item.source === "local" && (
                     <Text style={styles.localTag}>Plato registrado por socio</Text>
                   )}
@@ -401,8 +445,23 @@ const styles = StyleSheet.create({
   badgeText: { color: "#fff", fontWeight: "700", fontSize: 11 },
   name: { fontSize: 16, fontWeight: "700", flex: 1 },
   sub: { marginTop: 2, fontSize: 13, color: "#444" },
-  price: { marginTop: 6, fontSize: 14, fontWeight: "600", color: "#FF6A00" },
+  priceRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6 },
+  price: { fontSize: 14, fontWeight: "700", color: "#FF6A00" },
+  priceOriginal: { fontSize: 12, color: "#aaa", textDecorationLine: "line-through" },
   city: { marginTop: 4, fontSize: 13, color: "#555" },
+  actionsRow: { flexDirection: "row", gap: 8, marginTop: 10 },
+  actionBtn: {
+    minHeight: 48,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: "#FF6A00",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  actionBtnText: { color: "#fff", fontWeight: "700", fontSize: 13 },
+  reservaBtn: { backgroundColor: "#111" },
+  reservaBtnText: { color: "#fff" },
   localTag: { marginTop: 6, fontSize: 12, fontWeight: "600", color: "#FF6A00" },
   empty: { textAlign: "center", marginTop: 30, color: "#666" },
 });
