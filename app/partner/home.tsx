@@ -120,6 +120,13 @@ export default function PartnerHomeScreen() {
 
             <Pressable
               style={styles.secondaryButton}
+              onPress={() => router.push("/partner/menu-ia")}
+            >
+              <Text style={styles.secondaryText}>📷 Subir menú con IA</Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.secondaryButton}
               onPress={() => router.push("/partner/analytics")}
             >
               <Text style={styles.secondaryText}>📊 Ver analíticas</Text>
