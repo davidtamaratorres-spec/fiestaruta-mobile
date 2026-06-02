@@ -28,11 +28,18 @@
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.dishquest.app"
     },
     "web": {
       "favicon": "./assets/images/favicon.png",
       "bundler": "metro"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "d80195ca-804a-4684-a45c-e86686505b1e"
+      }
+    },
+    "owner": "mechquest"
   }
 }
