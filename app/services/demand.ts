@@ -27,8 +27,6 @@ export async function logDemand(query: string, city: string | null) {
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(log));
 }
 
-export default { logDemand, getDemandSummary };
-
 export async function getDemandSummary() {
   const log = await getStoredLog();
 

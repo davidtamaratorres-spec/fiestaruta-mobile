@@ -1,6 +1,4 @@
-export default {};
-
-export interface Dish {
+ export interface Dish {
   id: string;
   restaurantId: string;
   name: string;

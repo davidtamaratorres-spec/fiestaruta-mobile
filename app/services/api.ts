@@ -1,19 +1,31 @@
-// app/services/api.ts
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export const API_URL = "https://dishquest-backend.onrender.com";
+export const API_URL = 'https://dishquest-backend.onrender.com';
 
-export async function apiFetch<T>(endpoint: string): Promise<T> {
-  const url = `${API_URL}${endpoint}`;
+export async function apiFetch<T>(
+  path: string,
+  options: { method?: string; body?: object } = {}
+): Promise<T> {
+  const token = await AsyncStorage.getItem('partner_token');
 
-  console.log("📡 FETCH:", url);
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
 
-  const response = await fetch(url);
-
-  if (!response.ok) {
-    throw new Error(`HTTP error ${response.status}`);
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
   }
 
-  return response.json();
-}
+  const res = await fetch(`${API_URL}${path}`, {
+    method: options.method || 'GET',
+    headers,
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  });
 
-export default { API_URL, apiFetch };
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ error: 'Error desconocido' }));
+    throw new Error(error.error || `HTTP ${res.status}`);
+  }
+
+  return res.json();
+}

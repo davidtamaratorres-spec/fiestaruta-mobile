@@ -21,7 +21,5 @@ export async function fetchDishes(): Promise<Dish[]> {
   return response.data;
 }
 
-export default { fetchDishes };
-
 
 

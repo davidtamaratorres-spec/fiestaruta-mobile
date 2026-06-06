@@ -20,7 +20,7 @@ type Props = {
   onlyDiscounts: boolean;
   onToggleDiscounts: () => void;
 
-  cities?: string[];
+  cities: string[];
   isSearching?: boolean;
 };
 
@@ -31,7 +31,7 @@ export function FiltersBar({
   onCityChange,
   onlyDiscounts,
   onToggleDiscounts,
-  cities = [],
+  cities,
   isSearching = false,
 }: Props) {
   const [cityModalOpen, setCityModalOpen] = useState(false);

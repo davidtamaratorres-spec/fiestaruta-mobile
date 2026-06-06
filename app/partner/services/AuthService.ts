@@ -1,29 +1,60 @@
-import { User } from '../models/User';
-import { loadPartnerData, savePartnerData } from '../storage/partnerStorage';
-import { generateId } from './id';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { BASE_URL } from '../../services/backendApi';
 
-class AuthService {
-  async login(email: string): Promise<User> {
-    const data = await loadPartnerData();
+export const authService = {
+  async register(
+    email: string,
+    password: string,
+    nombre_restaurante: string,
+    ciudad: string,
+    whatsapp: string
+  ): Promise<void> {
+    const res = await fetch(`${BASE_URL}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, nombre_restaurante, ciudad, whatsapp }),
+    });
 
-    let user = data.users.find(u => u.email === email);
+    const data = await res.json();
 
-    if (!user) {
-      user = {
-        id: generateId(),
-        email,
-        role: 'partner',
-        createdAt: new Date().toISOString(),
-      };
-
-      data.users.push(user);
-      await savePartnerData(data);
+    if (!res.ok) {
+      throw new Error(data.error || 'Error al registrarse');
     }
 
-    return user;
-  }
-}
+    await AsyncStorage.setItem('partner_token', data.token);
+    await AsyncStorage.setItem('partner_restaurante_id', String(data.restaurante_id));
+  },
 
-export const authService = new AuthService();
+  async login(email: string, password: string): Promise<boolean> {
+    const res = await fetch(`${BASE_URL}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
 
-export default authService;
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Credenciales inválidas');
+    }
+
+    await AsyncStorage.setItem('partner_token', data.token);
+    await AsyncStorage.setItem('partner_restaurante_id', String(data.restaurante_id));
+
+    return true;
+  },
+
+  async logout(): Promise<void> {
+    await AsyncStorage.removeItem('partner_token');
+    await AsyncStorage.removeItem('partner_restaurante_id');
+  },
+
+  async getToken(): Promise<string | null> {
+    return AsyncStorage.getItem('partner_token');
+  },
+
+  async isLoggedIn(): Promise<boolean> {
+    const token = await AsyncStorage.getItem('partner_token');
+    return !!token;
+  },
+};

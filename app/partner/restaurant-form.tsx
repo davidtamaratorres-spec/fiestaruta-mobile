@@ -1,4 +1,3 @@
-import * as Crypto from "expo-crypto";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
@@ -10,112 +9,137 @@ import {
   TextInput,
 } from "react-native";
 
-import { Restaurant } from "./models/Restaurant";
-import { saveRestaurant } from "./storage/partnerStorage";
+import { backendPut } from "../services/backendApi";
+import { authService } from "./services/AuthService";
 
 export default function RestaurantFormScreen() {
   const router = useRouter();
 
-  const [name, setName] = useState("");
-  const [city, setCity] = useState("");
+  const [nombre, setNombre] = useState("");
+  const [ciudad, setCiudad] = useState("");
+  const [direccion, setDireccion] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
-  const [promo, setPromo] = useState("");
+  const [saving, setSaving] = useState(false);
 
   async function handleSave() {
-    if (!name.trim() || !city.trim()) {
-      Alert.alert(
-        "Datos obligatorios",
-        "El nombre del restaurante y la ciudad son obligatorios"
-      );
+    if (saving) return;
+
+    if (!nombre.trim() || !ciudad.trim() || !whatsapp.trim()) {
+      Alert.alert("Datos incompletos", "Nombre, ciudad y WhatsApp son obligatorios.");
       return;
     }
 
-    const restaurant: Restaurant = {
-      id: Crypto.randomUUID(),          // ✅ Expo compatible
-      userId: "local-partner",          // ✅ como cuando funcionaba
-      name: name.trim(),
-      city: city.trim(),
-      whatsapp: whatsapp.trim() || undefined,
-      promo: promo.trim() || undefined,
-      createdAt: Date.now(),            // ✅ requerido por el modelo
-    };
+    const isLogged = await authService.isLoggedIn();
+    if (!isLogged) {
+      router.replace("/partner/auth");
+      return;
+    }
 
+    setSaving(true);
     try {
-      await saveRestaurant(restaurant);
-      Alert.alert("Éxito", "Restaurante registrado correctamente");
-      router.replace("/partner/home");
-    } catch (e) {
-      console.error(e);
-      Alert.alert("Error", "No se pudo guardar el restaurante");
+      await backendPut("/partner/restaurante", {
+        nombre: nombre.trim(),
+        ciudad: ciudad.trim(),
+        direccion: direccion.trim(),
+        whatsapp: whatsapp.trim(),
+      });
+
+      Alert.alert("Restaurante actualizado", "Los datos fueron guardados correctamente.", [
+        { text: "OK", onPress: () => router.replace("/partner/home") },
+      ]);
+    } catch (e: any) {
+      if (e?.message?.includes("401")) {
+        await authService.logout();
+        router.replace("/partner/auth");
+        return;
+      }
+      Alert.alert("Error", e?.message ?? "No se pudo guardar el restaurante.");
+    } finally {
+      setSaving(false);
     }
   }
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Mi restaurante</Text>
+      <Text style={styles.title}>Editar restaurante</Text>
 
+      <Text style={styles.label}>Nombre</Text>
       <TextInput
-        placeholder="Nombre del restaurante *"
-        value={name}
-        onChangeText={setName}
+        placeholder="Nombre del restaurante"
         style={styles.input}
+        value={nombre}
+        onChangeText={setNombre}
       />
 
+      <Text style={styles.label}>Ciudad</Text>
       <TextInput
-        placeholder="Ciudad *"
-        value={city}
-        onChangeText={setCity}
+        placeholder="Ciudad"
         style={styles.input}
+        value={ciudad}
+        onChangeText={setCiudad}
       />
 
+      <Text style={styles.label}>Dirección</Text>
       <TextInput
-        placeholder="WhatsApp (opcional)"
+        placeholder="Dirección (opcional)"
+        style={styles.input}
+        value={direccion}
+        onChangeText={setDireccion}
+      />
+
+      <Text style={styles.label}>WhatsApp</Text>
+      <TextInput
+        placeholder="+57 300 000 0000"
+        style={styles.input}
         value={whatsapp}
         onChangeText={setWhatsapp}
-        style={styles.input}
         keyboardType="phone-pad"
       />
 
-      <TextInput
-        placeholder="Promoción (opcional)"
-        value={promo}
-        onChangeText={setPromo}
-        style={styles.input}
-      />
+      <Pressable
+        style={[styles.button, saving && styles.buttonDisabled]}
+        onPress={handleSave}
+        disabled={saving}
+      >
+        <Text style={styles.buttonText}>
+          {saving ? "Guardando..." : "Guardar cambios"}
+        </Text>
+      </Pressable>
 
-      <Pressable style={styles.button} onPress={handleSave}>
-        <Text style={styles.buttonText}>Guardar restaurante</Text>
+      <Pressable style={styles.secondaryButton} onPress={() => router.back()}>
+        <Text style={styles.secondaryText}>Cancelar</Text>
       </Pressable>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 24 },
-  title: {
-    fontSize: 22,
-    fontWeight: "600",
-    marginBottom: 20,
-  },
+  container: { padding: 24, paddingBottom: 40 },
+  title: { fontSize: 22, fontWeight: "700", marginBottom: 20 },
+  label: { fontSize: 13, color: "#666", marginBottom: 4, fontWeight: "600" },
   input: {
     borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    padding: 12,
+    borderColor: "#ddd",
+    borderRadius: 10,
+    padding: 13,
     marginBottom: 14,
+    backgroundColor: "#fafafa",
   },
   button: {
     backgroundColor: "#FF6A00",
     padding: 16,
-    borderRadius: 8,
+    borderRadius: 10,
+    alignItems: "center",
+    marginTop: 8,
+  },
+  buttonDisabled: { opacity: 0.5 },
+  buttonText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+  secondaryButton: {
+    backgroundColor: "#eee",
+    padding: 14,
+    borderRadius: 10,
     alignItems: "center",
     marginTop: 10,
   },
-  buttonText: {
-    color: "#fff",
-    fontWeight: "600",
-    fontSize: 16,
-  },
+  secondaryText: { fontWeight: "600", color: "#333" },
 });
-
-
