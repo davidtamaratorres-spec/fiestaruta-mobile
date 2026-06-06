@@ -53,3 +53,5 @@ class PartnerDataService {
 }
 
 export const partnerDataService = new PartnerDataService();
+
+export default partnerDataService;

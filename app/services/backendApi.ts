@@ -1,5 +1,5 @@
 // app/services/backendApi.ts
-const BASE_URL = "http://192.168.1.5:3000/api";
+const BASE_URL = "https://dishquest-backend.onrender.com/api";
 
 async function request<T>(
   path: string,

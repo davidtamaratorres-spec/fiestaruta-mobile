@@ -59,3 +59,5 @@ export async function getPublicDishes() {
   });
 }
 
+export default { loadPartnerData, savePartnerData, saveRestaurant, addDish, getPublicDishes };
+

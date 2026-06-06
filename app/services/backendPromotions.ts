@@ -16,3 +16,5 @@ export type BackendPromotion = {
 export async function fetchBackendPromotions(): Promise<BackendPromotion[]> {
   return backendGet<BackendPromotion[]>(`/promotions`);
 }
+
+export default { fetchBackendPromotions };

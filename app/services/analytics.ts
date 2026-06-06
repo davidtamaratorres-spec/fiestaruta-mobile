@@ -20,4 +20,6 @@ export async function sendAnalyticsEvent(data: AnalyticsEvent) {
   }
 }
 
+export default { sendAnalyticsEvent };
+
 

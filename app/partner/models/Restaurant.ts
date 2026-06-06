@@ -1,3 +1,5 @@
+export default {};
+
 export type Restaurant = {
   id: string;
   userId: string;          // ← CLAVE para el socio

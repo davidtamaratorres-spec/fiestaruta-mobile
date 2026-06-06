@@ -1,5 +1,7 @@
 export type DiscountType = "percentage" | "two_for_one" | "free_item";
 
+export default {};
+
 export type Dish = {
   id: string;
   name: string;

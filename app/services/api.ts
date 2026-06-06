@@ -15,3 +15,5 @@ export async function apiFetch<T>(endpoint: string): Promise<T> {
 
   return response.json();
 }
+
+export default { API_URL, apiFetch };

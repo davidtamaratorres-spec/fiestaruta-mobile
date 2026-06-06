@@ -50,3 +50,5 @@ export async function createBackendDish(
     disponible: input.disponible ?? 1,
   });
 }
+
+export default { fetchBackendDishes, fetchBackendDishById, createBackendDish };

@@ -32,3 +32,5 @@ class MenuIngestionService {
 }
 
 export const menuIngestionService = new MenuIngestionService();
+
+export default menuIngestionService;

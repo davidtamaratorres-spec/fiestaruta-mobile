@@ -12,3 +12,5 @@ export type BackendRestaurant = {
 export async function fetchBackendRestaurants(): Promise<BackendRestaurant[]> {
   return backendGet<BackendRestaurant[]>(`/restaurants`);
 }
+
+export default { fetchBackendRestaurants };
