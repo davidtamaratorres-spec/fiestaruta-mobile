@@ -11,6 +11,8 @@ export type PublicDish = {
   city: string;
 };
 
+export default { getPublicDishes };
+
 export async function getPublicDishes(): Promise<PublicDish[]> {
   const data = await loadPartnerData();
 

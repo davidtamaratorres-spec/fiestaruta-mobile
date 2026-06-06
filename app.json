@@ -2,6 +2,7 @@
   "expo": {
     "name": "DishQuest",
     "slug": "dishquest-mobile",
+    "scheme": "dishquest",
     "version": "1.3.0",
     "orientation": "portrait",
     "icon": "./assets/images/icons/icon.png",

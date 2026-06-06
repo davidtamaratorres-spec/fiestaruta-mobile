@@ -219,6 +219,11 @@ export default function HomeScreen() {
       .filter((i) => (onlyDiscounts ? i.hasDiscount : true));
   }, [items, query, city, onlyDiscounts]);
 
+  const cities = useMemo(
+    () => [...new Set(items.map((i) => i.city).filter(Boolean))].sort() as string[],
+    [items]
+  );
+
   const hasActiveFilters = query.length > 0 || !!city || onlyDiscounts;
 
   const clearFilters = () => {
@@ -253,6 +258,7 @@ export default function HomeScreen() {
             onCityChange={setCity}
             onlyDiscounts={onlyDiscounts}
             onToggleDiscounts={() => setOnlyDiscounts((v) => !v)}
+            cities={cities}
           />
 
           {hasActiveFilters && (
