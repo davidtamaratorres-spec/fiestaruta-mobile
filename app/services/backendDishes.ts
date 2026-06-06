@@ -10,10 +10,6 @@ export type BackendDish = {
   categoria?: string;
   imagen_url?: string;
   disponible: number;
-  tiene_descuento?: number;
-  porcentaje_descuento?: number;
-  acepta_domicilio?: number;
-  acepta_reserva?: number;
   ciudad?: string;
   municipio?: string;
   departamento?: string;
@@ -35,11 +31,6 @@ export type CreateBackendDishInput = {
 
 export async function fetchBackendDishes(): Promise<BackendDish[]> {
   return backendGet<BackendDish[]>(`/dishes`);
-}
-
-export async function searchBackendDishes(q: string): Promise<BackendDish[]> {
-  if (!q.trim()) return [];
-  return backendGet<BackendDish[]>(`/dishes/search?q=${encodeURIComponent(q.trim())}`);
 }
 
 export async function fetchBackendDishById(id: number): Promise<BackendDish> {

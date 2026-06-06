@@ -1,9 +1,13 @@
 export type Restaurant = {
   id: string;
-  userId: string;
+  userId: string;          // ← CLAVE para el socio
   name: string;
   city: string;
+
+  // captación
   whatsapp?: string;
   promo?: string;
-  createdAt: string;
+
+  // control interno
+  createdAt: number;
 };

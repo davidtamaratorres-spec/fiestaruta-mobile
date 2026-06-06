@@ -1,65 +1,39 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+// app/services/backendApi.ts
+const BASE_URL = "http://192.168.1.5:3000/api";
 
-export const BASE_URL = 'https://dishquest-backend.onrender.com';
-
-async function getHeaders(): Promise<Record<string, string>> {
-  const token = await AsyncStorage.getItem('partner_token');
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  return headers;
-}
-
-export async function backendGet<T>(path: string): Promise<T> {
-  const headers = await getHeaders();
-  const res = await fetch(`${BASE_URL}${path}`, { headers });
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ error: 'Error desconocido' }));
-    throw new Error(error.error || `HTTP ${res.status}`);
-  }
-  return res.json();
-}
-
-export async function backendPost<T>(path: string, body: object): Promise<T> {
-  const headers = await getHeaders();
+async function request<T>(
+  path: string,
+  options?: RequestInit
+): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
-    method: 'POST',
-    headers,
+    headers: {
+      "Content-Type": "application/json",
+      ...(options?.headers || {}),
+    },
+    ...options,
+  });
+
+  const text = await res.text();
+
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} ${path} ${text.slice(0, 200)}`);
+  }
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    // por si alguna vez el backend responde texto
+    return text as unknown as T;
+  }
+}
+
+export function backendGet<T>(path: string): Promise<T> {
+  return request<T>(path);
+}
+
+export function backendPost<T>(path: string, body: any): Promise<T> {
+  return request<T>(path, {
+    method: "POST",
     body: JSON.stringify(body),
   });
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ error: 'Error desconocido' }));
-    throw new Error(error.error || `HTTP ${res.status}`);
-  }
-  return res.json();
-}
-
-export async function backendPut<T>(path: string, body: object): Promise<T> {
-  const headers = await getHeaders();
-  const res = await fetch(`${BASE_URL}${path}`, {
-    method: 'PUT',
-    headers,
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ error: 'Error desconocido' }));
-    throw new Error(error.error || `HTTP ${res.status}`);
-  }
-  return res.json();
-}
-
-export async function backendDelete<T>(path: string): Promise<T> {
-  const headers = await getHeaders();
-  const res = await fetch(`${BASE_URL}${path}`, {
-    method: 'DELETE',
-    headers,
-  });
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ error: 'Error desconocido' }));
-    throw new Error(error.error || `HTTP ${res.status}`);
-  }
-  return res.json();
 }

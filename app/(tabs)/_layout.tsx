@@ -1,77 +1,48 @@
-import { Tabs } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Tabs, useRouter } from 'expo-router';
+import React from 'react';
+import { Pressable, Text } from 'react-native';
 
-const C = {
-  orange:   '#FF5E00',
-  surface:  '#181818',
-  textDim:  '#555555',
-  border:   'rgba(255,255,255,0.07)',
-} as const;
-
-type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
-
-function tabIcon(focused: boolean, on: IoniconName, off: IoniconName) {
-  return ({ color }: { color: string }) => (
-    <Ionicons name={focused ? on : off} size={20} color={color} />
-  );
-}
+import { HapticTab } from '@/components/haptic-tab';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import { Colors } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function TabLayout() {
+  const colorScheme = useColorScheme();
+  const router = useRouter();
+
   return (
     <Tabs
       screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: C.orange,
-        tabBarInactiveTintColor: C.textDim,
-        tabBarStyle: {
-          backgroundColor: C.surface,
-          borderTopColor: C.border,
-          borderTopWidth: 1,
-          height: 60,
-          paddingBottom: 6,
-          paddingTop: 4,
-        },
-        tabBarLabelStyle: {
-          fontSize: 9,
-          letterSpacing: 0.5,
-          fontFamily: 'Outfit_700Bold',
-          fontWeight: '700',
-        },
+        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
+        headerShown: true,
+        tabBarButton: HapticTab,
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Inicio',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'home' : 'home-outline'} size={20} color={color} />
+          title: 'Home',
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={28} name="house.fill" color={color} />
+          ),
+          headerRight: () => (
+            <Pressable
+              onPress={() => router.push('/partner')}
+              style={{ marginRight: 16 }}
+            >
+              <Text style={{ fontSize: 20 }}>⋮</Text>
+            </Pressable>
           ),
         }}
       />
+
       <Tabs.Screen
         name="explore"
         options={{
-          title: 'Explorar',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'search' : 'search-outline'} size={20} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="mapa"
-        options={{
-          title: 'Mapa',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'location' : 'location-outline'} size={20} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="perfil"
-        options={{
-          title: 'Perfil',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'person' : 'person-outline'} size={20} color={color} />
+          title: 'Explore',
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={28} name="paperplane.fill" color={color} />
           ),
         }}
       />
