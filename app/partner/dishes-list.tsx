@@ -4,8 +4,6 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  Image,
-  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -29,21 +27,11 @@ type Plato = {
   acepta_reserva?: number;
 };
 
-type QrData = {
-  token: string;
-  porcentaje_descuento: number;
-  fecha_expiracion: string;
-  qr_image_url: string;
-};
-
 export default function DishesListScreen() {
   const router = useRouter();
 
   const [platos, setPlatos] = useState<Plato[]>([]);
   const [loading, setLoading] = useState(true);
-  const [qrLoadingId, setQrLoadingId] = useState<number | null>(null);
-  const [qrData, setQrData] = useState<QrData | null>(null);
-  const [qrDishName, setQrDishName] = useState("");
 
   useFocusEffect(
     useCallback(() => {
@@ -95,19 +83,6 @@ export default function DishesListScreen() {
     );
   }
 
-  async function showQr(plato: Plato) {
-    setQrLoadingId(plato.id);
-    try {
-      const data = await backendGet<QrData>(`/partner/platos/${plato.id}/qr`);
-      setQrDishName(plato.nombre);
-      setQrData(data);
-    } catch (e: any) {
-      Alert.alert("Error", e?.message ?? "No se pudo generar el QR.");
-    } finally {
-      setQrLoadingId(null);
-    }
-  }
-
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -151,15 +126,6 @@ export default function DishesListScreen() {
 
               <View style={styles.itemActions}>
                 <Pressable
-                  style={styles.qrBtn}
-                  onPress={() => showQr(item)}
-                  disabled={qrLoadingId === item.id}
-                >
-                  <Text style={styles.qrText}>
-                    {qrLoadingId === item.id ? "..." : "🎟️ QR"}
-                  </Text>
-                </Pressable>
-                <Pressable
                   style={styles.editBtn}
                   onPress={() => router.push({
                     pathname: "/partner/edit-dish",
@@ -202,28 +168,6 @@ export default function DishesListScreen() {
       <Pressable style={styles.secondaryButton} onPress={() => router.back()}>
         <Text style={styles.secondaryText}>Volver al panel</Text>
       </Pressable>
-
-      <Modal visible={!!qrData} transparent animationType="fade" onRequestClose={() => setQrData(null)}>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>QR de descuento</Text>
-            <Text style={styles.modalSubtitle}>{qrDishName}</Text>
-            {qrData ? (
-              <>
-                <Image source={{ uri: qrData.qr_image_url }} style={styles.qrImage} />
-                <Text style={styles.modalInfo}>
-                  {qrData.porcentaje_descuento}% de descuento · vence{" "}
-                  {new Date(qrData.fecha_expiracion).toLocaleString("es-CO")}
-                </Text>
-                <Text style={styles.tokenText}>{qrData.token}</Text>
-              </>
-            ) : null}
-            <Pressable style={styles.modalButton} onPress={() => setQrData(null)}>
-              <Text style={styles.modalButtonText}>Cerrar</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -262,16 +206,6 @@ const styles = StyleSheet.create({
   },
   inactiveText: { fontSize: 11, color: "#999", fontWeight: "600" },
   itemActions: { gap: 8, alignItems: "flex-end" },
-  qrBtn: {
-    minHeight: 36,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: "#FF6A00",
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  qrText: { color: "#fff", fontWeight: "700", fontSize: 13 },
   editBtn: {
     minHeight: 36,
     paddingHorizontal: 12,
@@ -300,26 +234,4 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   secondaryText: { fontWeight: "600", color: "#333" },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
-  },
-  modalCard: {
-    width: "100%",
-    maxWidth: 360,
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    padding: 20,
-    alignItems: "center",
-  },
-  modalTitle: { fontSize: 20, fontWeight: "800", color: "#111" },
-  modalSubtitle: { fontSize: 14, color: "#666", marginTop: 4, marginBottom: 14, textAlign: "center" },
-  qrImage: { width: 260, height: 260, backgroundColor: "#f5f5f5", marginBottom: 12 },
-  modalInfo: { fontSize: 13, color: "#444", textAlign: "center", marginBottom: 8 },
-  tokenText: { fontSize: 10, color: "#999", textAlign: "center", marginBottom: 14 },
-  modalButton: { backgroundColor: "#111", paddingHorizontal: 22, paddingVertical: 12, borderRadius: 10 },
-  modalButtonText: { color: "#fff", fontWeight: "700" },
 });
