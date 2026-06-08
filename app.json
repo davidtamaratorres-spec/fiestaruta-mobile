@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "FestQuest",
+    "name": "DishQuest",
     "slug": "dishquest-mobile",
     "version": "1.3.0",
     "orientation": "portrait",
@@ -9,7 +9,7 @@
     "splash": {
       "image": "./assets/images/icons/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#2d2d2d"
+      "backgroundColor": "#E8521A"
     },
     "ios": {
       "supportsTablet": true,
@@ -27,7 +27,7 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#E8521A"
       },
       "package": "com.dishquest.app"
     },

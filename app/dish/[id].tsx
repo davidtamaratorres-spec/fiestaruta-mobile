@@ -160,7 +160,7 @@ export default function DishDetail() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#FF6A00" />
+        <ActivityIndicator size="large" color="#E8521A" />
         <Text style={styles.muted}>Cargando plato...</Text>
       </View>
     );
@@ -274,14 +274,14 @@ export default function DishDetail() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
+  container: { flex: 1, backgroundColor: "#FFF8F0" },
   content: { paddingBottom: 50 },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 24 },
   muted: { color: "#666" },
   errorText: { color: "red", fontWeight: "600", textAlign: "center" },
   backRow: { padding: 20, paddingBottom: 8 },
   backText: { fontSize: 14, fontWeight: "600", color: "#333" },
-  backBtn: { marginTop: 12, backgroundColor: "#FF6A00", padding: 14, borderRadius: 10, alignItems: "center", minWidth: 120 },
+  backBtn: { marginTop: 12, backgroundColor: "#E8521A", padding: 14, borderRadius: 10, alignItems: "center", minWidth: 120 },
   backBtnText: { color: "#fff", fontWeight: "700" },
 
   hero: { width: "100%", height: 240, backgroundColor: "#e6e6e6" },
@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 72,
     right: 20,
-    backgroundColor: "#FF6A00",
+    backgroundColor: "#E8521A",
     borderRadius: 20,
     paddingHorizontal: 14,
     paddingVertical: 6,
@@ -299,7 +299,7 @@ const styles = StyleSheet.create({
 
   name: { fontSize: 24, fontWeight: "700", paddingHorizontal: 20, paddingTop: 16 },
   priceRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 20, marginTop: 6 },
-  price: { fontSize: 20, fontWeight: "700", color: "#FF6A00" },
+  price: { fontSize: 20, fontWeight: "700", color: "#E8521A" },
   priceOld: { fontSize: 15, color: "#aaa", textDecorationLine: "line-through" },
   categoria: { paddingHorizontal: 20, marginTop: 4, fontSize: 13, color: "#888" },
 
@@ -312,7 +312,7 @@ const styles = StyleSheet.create({
   actionsSection: { paddingHorizontal: 20, marginTop: 24, gap: 12 },
   actionBtn: {
     minHeight: 56,
-    backgroundColor: "#FF6A00",
+    backgroundColor: "#E8521A",
     borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",

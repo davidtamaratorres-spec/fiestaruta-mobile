@@ -18,6 +18,7 @@ import {
 import { backendPost } from "../services/backendApi";
 import { authService } from "./services/AuthService";
 
+
 type ExtractedDish = {
   nombre: string;
   precio: number;
@@ -135,10 +136,13 @@ export default function MenuIaScreen() {
     try {
       const prepared = await ImageManipulator.manipulateAsync(image.uri, [], SAVE_OPTIONS);
       if (!prepared.base64) throw new Error("No se pudo preparar la imagen.");
-      const data = await backendPost<MenuIaResponse>("/partner/menu-ia", {
-        image_base64: prepared.base64,
-        media_type: "image/jpeg",
+      const response = await fetch("https://dishquest-backend.onrender.com/ai/analyze-menu", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64: prepared.base64, mediaType: "image/jpeg" }),
       });
+      if (!response.ok) throw new Error(`Error IA: ${response.status}`);
+      const data = await response.json();
       normalizeDishes(data);
     } catch (e: any) {
       Alert.alert("Error IA", e?.message ?? "No se pudo extraer el menu.");

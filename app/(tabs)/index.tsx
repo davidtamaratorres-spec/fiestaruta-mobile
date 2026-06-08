@@ -1,3 +1,4 @@
+// VERSION RESTAURADA 30 MAYO
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -309,7 +310,7 @@ export default function HomeScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#FF6A00" />
+        <ActivityIndicator size="large" color="#E8521A" />
         <Text style={{ marginTop: 10, color: "#666" }}>Cargando platos...</Text>
       </View>
     );
@@ -423,8 +424,8 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: "#fff" },
-  title: { fontSize: 24, fontWeight: "700", marginBottom: 12 },
+  container: { flex: 1, padding: 20, backgroundColor: "#FFF8F0" },
+  title: { fontSize: 24, fontWeight: "700", marginBottom: 12, color: "#1A1A1A" },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   activeBar: {
     flexDirection: "row",
@@ -436,17 +437,17 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   activeText: { fontSize: 12, color: "#333", flex: 1 },
-  clear: { fontSize: 12, fontWeight: "600", color: "#FF6A00" },
-  card: { flexDirection: "row", gap: 12, padding: 12, borderRadius: 12, backgroundColor: "#f2f2f2" },
+  clear: { fontSize: 12, fontWeight: "600", color: "#E8521A" },
+  card: { flexDirection: "row", gap: 12, padding: 12, borderRadius: 12, backgroundColor: "#fff" },
   thumb: { width: 74, height: 74, borderRadius: 12, backgroundColor: "#e6e6e6" },
   cardBody: { flex: 1 },
   row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 },
-  badge: { backgroundColor: "#FF6A00", borderRadius: 999, paddingHorizontal: 12, paddingVertical: 5 },
+  badge: { backgroundColor: "#E8521A", borderRadius: 999, paddingHorizontal: 12, paddingVertical: 5 },
   badgeText: { color: "#fff", fontWeight: "700", fontSize: 11 },
-  name: { fontSize: 16, fontWeight: "700", flex: 1 },
+  name: { fontSize: 16, fontWeight: "700", flex: 1, color: "#1A1A1A" },
   sub: { marginTop: 2, fontSize: 13, color: "#444" },
   priceRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6 },
-  price: { fontSize: 14, fontWeight: "700", color: "#FF6A00" },
+  price: { fontSize: 14, fontWeight: "700", color: "#E8521A" },
   priceOriginal: { fontSize: 12, color: "#aaa", textDecorationLine: "line-through" },
   city: { marginTop: 4, fontSize: 13, color: "#555" },
   actionsRow: { flexDirection: "row", gap: 8, marginTop: 10 },
@@ -455,13 +456,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 10,
-    backgroundColor: "#FF6A00",
+    backgroundColor: "#E8521A",
     justifyContent: "center",
     alignItems: "center",
   },
   actionBtnText: { color: "#fff", fontWeight: "700", fontSize: 13 },
   reservaBtn: { backgroundColor: "#111" },
   reservaBtnText: { color: "#fff" },
-  localTag: { marginTop: 6, fontSize: 12, fontWeight: "600", color: "#FF6A00" },
+  localTag: { marginTop: 6, fontSize: 12, fontWeight: "600", color: "#E8521A" },
   empty: { textAlign: "center", marginTop: 30, color: "#666" },
 });

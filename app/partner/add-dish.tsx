@@ -1,6 +1,7 @@
+import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Image,
@@ -15,12 +16,14 @@ import {
   TextInput,
   View,
 } from "react-native";
+import type { ScrollView as ScrollViewType } from "react-native";
 
 import { backendPost } from "../services/backendApi";
 import { authService } from "./services/AuthService";
 
 export default function AddDishScreen() {
   const router = useRouter();
+  const scrollRef = useRef<ScrollViewType>(null);
 
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
@@ -28,7 +31,14 @@ export default function AddDishScreen() {
   const [categoria, setCategoria] = useState("");
   const [available, setAvailable] = useState(true);
   const [imageUri, setImageUri] = useState<string | null>(null);
+  const [editingUri, setEditingUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (editingUri) {
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
+    }
+  }, [editingUri]);
 
   const [tieneDescuento, setTieneDescuento] = useState(false);
   const [porcentajeDescuento, setPorcentajeDescuento] = useState("");
@@ -46,7 +56,46 @@ export default function AddDishScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.7,
     });
-    if (!result.canceled) setImageUri(result.assets[0].uri);
+    if (!result.canceled) setEditingUri(result.assets[0].uri);
+  }
+
+  async function handleRotate() {
+    if (!editingUri) return;
+    const result = await ImageManipulator.manipulateAsync(
+      editingUri,
+      [{ rotate: 90 }],
+      { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
+    );
+    setEditingUri(result.uri);
+  }
+
+  async function handleCrop() {
+    if (!editingUri) return;
+    try {
+      const probe = await ImageManipulator.manipulateAsync(editingUri, [], { format: ImageManipulator.SaveFormat.JPEG });
+      const w = probe.width;
+      const h = probe.height;
+      const side = Math.min(w, h) * 0.8;
+      const originX = (w - side) / 2;
+      const originY = (h - side) / 2;
+      const cropped = await ImageManipulator.manipulateAsync(
+        editingUri,
+        [{ crop: { originX, originY, width: side, height: side } }],
+        { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
+      );
+      setEditingUri(cropped.uri);
+    } catch {
+      Alert.alert("Error", "No se pudo recortar la imagen.");
+    }
+  }
+
+  function handleConfirmPhoto() {
+    setImageUri(editingUri);
+    setEditingUri(null);
+  }
+
+  function handleCancelPhoto() {
+    setEditingUri(null);
   }
 
   async function handleSave() {
@@ -101,7 +150,7 @@ export default function AddDishScreen() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>Agregar plato</Text>
 
         <TextInput placeholder="Nombre del plato" style={styles.input} value={name} onChangeText={setName} returnKeyType="done" onSubmitEditing={Keyboard.dismiss} />
@@ -153,10 +202,34 @@ export default function AddDishScreen() {
 
         <View style={styles.divider} />
 
-        <Pressable style={styles.imagePicker} onPress={pickImage}>
-          <Text style={styles.imagePickerText}>{imageUri ? "Cambiar foto" : "Agregar foto del plato"}</Text>
-        </Pressable>
-        {imageUri && <Image source={{ uri: imageUri }} style={styles.preview} />}
+        {editingUri ? (
+          <View style={styles.photoEditor}>
+            <Image source={{ uri: editingUri }} style={styles.editorPreview} resizeMode="contain" />
+            <View style={styles.editorBtns}>
+              <Pressable style={styles.editorBtn} onPress={handleRotate}>
+                <Text style={styles.editorBtnText}>↺ Rotar</Text>
+              </Pressable>
+              <Pressable style={styles.editorBtn} onPress={handleCrop}>
+                <Text style={styles.editorBtnText}>✂ Recortar</Text>
+              </Pressable>
+            </View>
+            <View style={styles.editorBtns}>
+              <Pressable style={[styles.editorBtn, styles.editorBtnConfirm]} onPress={handleConfirmPhoto}>
+                <Text style={[styles.editorBtnText, { color: "#fff" }]}>✓ Usar foto</Text>
+              </Pressable>
+              <Pressable style={[styles.editorBtn, styles.editorBtnCancel]} onPress={handleCancelPhoto}>
+                <Text style={[styles.editorBtnText, { color: "#CC2200" }]}>✕ Cancelar</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : (
+          <>
+            <Pressable style={styles.imagePicker} onPress={pickImage}>
+              <Text style={styles.imagePickerText}>{imageUri ? "Cambiar foto" : "Agregar foto del plato"}</Text>
+            </Pressable>
+            {imageUri && <Image source={{ uri: imageUri }} style={styles.preview} />}
+          </>
+        )}
 
         <Pressable style={[styles.button, saving && styles.buttonDisabled]} onPress={handleSave} disabled={saving}>
           <Text style={styles.buttonText}>{saving ? "Guardando..." : "Guardar plato"}</Text>
@@ -182,4 +255,12 @@ const styles = StyleSheet.create({
   button: { backgroundColor: "#FF6A00", padding: 16, borderRadius: 10, alignItems: "center", marginTop: 8, marginBottom: 30 },
   buttonDisabled: { opacity: 0.5 },
   buttonText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+
+  photoEditor: { marginBottom: 16, backgroundColor: "#f5f5f5", borderRadius: 12, zIndex: 10, elevation: 2 },
+  editorPreview: { width: "100%", height: 240, backgroundColor: "#000", borderRadius: 12 },
+  editorBtns: { flexDirection: "row", gap: 8, padding: 8, minHeight: 52 },
+  editorBtn: { flex: 1, backgroundColor: "#eee", borderRadius: 8, minHeight: 44, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#ddd" },
+  editorBtnText: { fontWeight: "600", color: "#333", fontSize: 14 },
+  editorBtnConfirm: { backgroundColor: "#E8521A", borderColor: "#E8521A" },
+  editorBtnCancel: { backgroundColor: "#fff", borderColor: "#CC2200" },
 });
