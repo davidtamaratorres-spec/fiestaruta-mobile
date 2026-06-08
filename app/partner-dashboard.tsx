@@ -232,7 +232,7 @@ export default function PartnerDashboard() {
         </Pressable>
         <Pressable
           style={[styles.aiBtn, aiLoading && styles.btnDisabled]}
-          onPress={handleAiMenu}
+          onPress={() => router.push("/partner/menu-ia")}
           disabled={aiLoading}
         >
           {aiLoading ? (

@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Alert,
   Keyboard,
@@ -14,7 +14,7 @@ import {
   View,
 } from "react-native";
 
-import { backendPut } from "../services/backendApi";
+import { backendGet, backendPut } from "../services/backendApi";
 import { authService } from "./services/AuthService";
 
 export default function EditDishScreen() {
@@ -50,6 +50,28 @@ export default function EditDishScreen() {
   const [saving, setSaving] = useState(false);
 
   const id = Number(params.id);
+
+  useEffect(() => {
+    async function loadDish() {
+      console.log('Cargando plato con id:', id, typeof id);
+      try {
+        const data = await backendGet<Record<string, any>>(`/partner/platos/${id}`);
+        setName(data.nombre || "");
+        setPrice(String(data.precio || ""));
+        setDescription(data.descripcion || "");
+        setCategoria(data.categoria || "");
+        setImagenUrl(data.imagen_url || "");
+        setAvailable(data.disponible === 1);
+        setTieneDescuento(data.tiene_descuento === 1);
+        setPorcentajeDescuento(data.porcentaje_descuento > 0 ? String(data.porcentaje_descuento) : "");
+        setAceptaDomicilio(data.acepta_domicilio === 1);
+        setAceptaReserva(data.acepta_reserva === 1);
+      } catch {
+        Alert.alert("Error", "No se pudo cargar el plato.");
+      }
+    }
+    if (id) loadDish();
+  }, [id]);
 
   async function handleSave() {
     Keyboard.dismiss();

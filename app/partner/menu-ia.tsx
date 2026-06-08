@@ -101,6 +101,7 @@ export default function MenuIaScreen() {
       aspect: [4, 3],
       quality: 0.8,
     });
+    console.log('allowsEditing activo, resultado:', JSON.stringify(result));
     if (!result.canceled) setPickedImage(result.assets[0], "camera");
   }
 
@@ -128,6 +129,7 @@ export default function MenuIaScreen() {
       Alert.alert("Error", e?.message ?? "No se pudo rotar la imagen.");
     }
   }
+
 
   async function analyzeImage() {
     if (!image || extracting) return;
@@ -235,7 +237,7 @@ export default function MenuIaScreen() {
         });
       }
       Alert.alert("Platos guardados", "Los platos seleccionados fueron creados.", [
-        { text: "OK", onPress: () => router.replace("/partner/home") },
+        { text: "OK", onPress: () => router.back() },
       ]);
     } catch (e: any) {
       Alert.alert("Error", e?.message ?? "No se pudieron guardar los platos.");
@@ -280,8 +282,9 @@ export default function MenuIaScreen() {
           <Pressable style={styles.toolButton} onPress={rotateImage} disabled={extracting}>
             <Text style={styles.toolText}>🔄 Rotar</Text>
           </Pressable>
+
           <Pressable style={styles.confirmButton} onPress={analyzeImage} disabled={extracting || saving}>
-            <Text style={styles.buttonText}>{extracting ? "Analizando..." : "✅ Usar esta imagen"}</Text>
+            <Text style={styles.buttonText}>{extracting ? "Analizando..." : "✅ Listo - Analizar con IA"}</Text>
           </Pressable>
           <Pressable style={styles.secondaryButton} onPress={retakeImage} disabled={extracting || saving}>
             <Text style={styles.secondaryText}>📷 Volver a tomar</Text>
