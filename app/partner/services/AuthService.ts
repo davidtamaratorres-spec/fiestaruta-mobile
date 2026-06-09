@@ -7,12 +7,13 @@ export const authService = {
     password: string,
     nombre_restaurante: string,
     ciudad: string,
+    direccion: string,
     whatsapp: string
   ): Promise<void> {
     const res = await fetch(`${BASE_URL}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, nombre_restaurante, ciudad, whatsapp }),
+      body: JSON.stringify({ email, password, nombre_restaurante, ciudad, direccion, whatsapp }),
     });
 
     const data = await res.json();

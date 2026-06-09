@@ -15,7 +15,7 @@ import {
   View,
 } from "react-native";
 
-import { backendPost } from "../services/backendApi";
+import { BASE_URL, backendPost } from "../services/backendApi";
 import { authService } from "./services/AuthService";
 
 
@@ -26,6 +26,7 @@ type ExtractedDish = {
   descripcion: string;
   categoria: string;
   selected: boolean;
+  cropUri?: string;
 };
 
 type MenuIaResponse = {
@@ -63,15 +64,16 @@ export default function MenuIaScreen() {
     setPlatos([]);
   }
 
-  function normalizeDishes(data: MenuIaResponse) {
+  function normalizeDishes(data: MenuIaResponse, cropUris: string[] = []) {
     setPlatos(
-      (data.platos || []).map((plato) => ({
+      (data.platos || []).map((plato, i) => ({
         nombre: plato.nombre || "",
         precio: Number(plato.precio) || 0,
         ingredientes: plato.ingredientes || [],
         descripcion: plato.descripcion || "",
         categoria: plato.categoria || "Menu",
         selected: true,
+        cropUri: cropUris[i],
       }))
     );
   }
@@ -145,7 +147,25 @@ export default function MenuIaScreen() {
       });
       if (!response.ok) throw new Error(`Error IA: ${response.status}`);
       const data = await response.json();
-      normalizeDishes(data);
+      const count = (data.platos || []).length;
+      const cropUris: string[] = [];
+      if (count > 0) {
+        const imageInfo = await ImageManipulator.manipulateAsync(prepared.uri, [], { compress: 1 });
+        const h = imageInfo.height > 0 ? imageInfo.height : (prepared.height || 1600);
+        const w = imageInfo.width > 0 ? imageInfo.width : (prepared.width || 1200);
+        const stripH = Math.floor(h / count) > 0 ? Math.floor(h / count) : Math.floor(h / count) || 1;
+        for (let i = 0; i < count; i++) {
+          const originY = i * stripH;
+          const height = i === count - 1 ? Math.max(1, h - originY) : stripH;
+          const crop = await ImageManipulator.manipulateAsync(
+            prepared.uri,
+            [{ crop: { originX: 0, originY, width: w, height } }],
+            { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+          );
+          cropUris.push(crop.uri);
+        }
+      }
+      normalizeDishes(data, cropUris);
     } catch (e: any) {
       Alert.alert("Error IA", e?.message ?? "No se pudo extraer el menu.");
     } finally {
@@ -223,7 +243,7 @@ export default function MenuIaScreen() {
         if (!plato.nombre.trim()) continue;
         const ingredientsText = plato.ingredientes.length ? `Ingredientes: ${plato.ingredientes.join(", ")}` : "";
         const descripcion = [plato.descripcion.trim(), ingredientsText].filter(Boolean).join("\n");
-        await backendPost("/partner/platos", {
+        const created = await backendPost<any>("/partner/platos", {
           nombre: plato.nombre.trim(),
           descripcion,
           precio: Number(plato.precio) || 0,
@@ -235,6 +255,17 @@ export default function MenuIaScreen() {
           acepta_domicilio: 0,
           acepta_reserva: 0,
         });
+        const platoId = created?.id || created?.plato?.id || created?.data?.id;
+        if (platoId && plato.cropUri) {
+          const token = await authService.getToken();
+          const formData = new FormData();
+          formData.append("imagen", { uri: plato.cropUri, type: "image/jpeg", name: "plato.jpg" } as any);
+          await fetch(`${BASE_URL}/partner/platos/${platoId}/imagen`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+            body: formData,
+          }).catch(() => {});
+        }
       }
       Alert.alert("Platos guardados", "Los platos seleccionados fueron creados.", [
         { text: "OK", onPress: () => router.back() },
@@ -335,6 +366,9 @@ export default function MenuIaScreen() {
           <Text style={styles.sectionTitle}>Preview IA antes de guardar</Text>
           {platos.map((plato, index) => (
             <View key={`${plato.nombre}-${index}`} style={styles.card}>
+              {plato.cropUri ? (
+                <Image source={{ uri: plato.cropUri }} style={styles.cropThumb} resizeMode="cover" />
+              ) : null}
               <View style={styles.switchRow}>
                 <Text style={styles.cardTitle}>Guardar plato</Text>
                 <Switch
@@ -427,4 +461,5 @@ const styles = StyleSheet.create({
   disabled: { opacity: 0.55 },
   secondaryButton: { backgroundColor: "#eee", borderRadius: 10, padding: 14, alignItems: "center", marginTop: 10 },
   secondaryText: { color: "#333", fontWeight: "800" },
+  cropThumb: { width: "100%", height: 100, borderRadius: 8, marginBottom: 10, backgroundColor: "#ddd" },
 });

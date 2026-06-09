@@ -1,4 +1,3 @@
-// VERSION RESTAURADA 30 MAYO
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -11,11 +10,21 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   TouchableWithoutFeedback,
   View,
 } from "react-native";
+import Animated, {
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+  interpolate,
+  FadeInDown,
+} from "react-native-reanimated";
+import * as Haptics from "expo-haptics";
+import * as Location from "expo-location";
+import { LinearGradient } from "expo-linear-gradient";
 
-import { FiltersBar } from "../../components/FiltersBar";
 import { getPublicDishes } from "../services/publicDishes";
 import {
   BackendDish,
@@ -31,6 +40,7 @@ import {
   fetchBackendRestaurants,
 } from "../services/backendRestaurants";
 import { logDemand } from "../services/demand";
+import { BASE_URL } from "../services/backendApi";
 
 type DishItem = {
   dishId: string;
@@ -47,85 +57,34 @@ type DishItem = {
   imageUrl?: string;
   imageUri?: string;
   source: "backend" | "local";
+  created_at?: string;
+  distancia_km?: number;
 };
 
-const PLACEHOLDER_IMG = require("../../assets/images/dish-placeholder.png");
+type FilterChip = "popular" | "nearby" | "new";
 
-const DISH_IMAGES: Record<string, any> = {
-  "ajiaco.jpg": require("../../assets/images/dishes/ajiaco.jpg"),
-  "arroz-con-camarones.jpg": require("../../assets/images/dishes/arroz-con-camarones.jpg"),
-  "bandeja-paisa.jpg": require("../../assets/images/dishes/bandeja-paisa.jpg"),
-  "bowl-vegano-energetico.jpg": require("../../assets/images/dishes/bowl-vegano-energetico.jpg"),
-  "burrito-mixto.jpg": require("../../assets/images/dishes/burrito-mixto.jpg"),
-  "cafe-especial.jpg": require("../../assets/images/dishes/cafe-especial.jpg"),
-  "cazuela-mariscos.jpg": require("../../assets/images/dishes/cazuela-mariscos.jpg"),
-  "chorizo-artesanal.jpg": require("../../assets/images/dishes/chorizo-artesanal.jpg"),
-  "churrasco-parrilla.jpg": require("../../assets/images/dishes/churrasco-parrilla.jpg"),
-  "costillas-bbq.jpg": require("../../assets/images/dishes/costillas-bbq.jpg"),
-  "desayuno-campesino.jpg": require("../../assets/images/dishes/desayuno-campesino.jpg"),
-  "hamburguesa-artesanal.jpg": require("../../assets/images/dishes/hamburguesa-artesanal.jpg"),
-  "hamburguesa-clasica.jpg": require("../../assets/images/dishes/hamburguesa-clasica.jpg"),
-  "hamburguesa-doble.jpg": require("../../assets/images/dishes/hamburguesa-doble.jpg"),
-  "hamburguesa-vegana.jpg": require("../../assets/images/dishes/hamburguesa-vegana.jpg"),
-  "lasana-vegana.jpg": require("../../assets/images/dishes/lasana-vegana.jpg"),
-  "mojarra-frita.jpg": require("../../assets/images/dishes/mojarra-frita.jpg"),
-  "mondongo.jpg": require("../../assets/images/dishes/mondongo.jpg"),
-  "mote-de-queso.jpg": require("../../assets/images/dishes/mote-de-queso.jpg"),
-  "papas-artesanales.jpg": require("../../assets/images/dishes/papas-artesanales.jpg"),
-  "pargo-rojo-frito.jpg": require("../../assets/images/dishes/pargo-rojo-frito.jpg"),
-  "pasta-carbonara.jpg": require("../../assets/images/dishes/pasta-carbonara.jpg"),
-  "perro-caliente-especial.jpg": require("../../assets/images/dishes/perro-caliente-especial.jpg"),
-  "pizza-margarita.jpg": require("../../assets/images/dishes/pizza-margarita.jpg"),
-  "punta-de-anca.jpg": require("../../assets/images/dishes/punta-de-anca.jpg"),
-  "smoothie-antioxidante.jpg": require("../../assets/images/dishes/smoothie-antioxidante.jpg"),
-  "tacos-al-pastor.jpg": require("../../assets/images/dishes/tacos-al-pastor.jpg"),
-  "wrap-vegetal.jpg": require("../../assets/images/dishes/wrap-vegetal.jpg"),
-};
+const FILTERS: { key: FilterChip; label: string }[] = [
+  { key: "popular", label: "Populares" },
+  { key: "nearby", label: "Cerca de ti" },
+  { key: "new", label: "Nuevos" },
+];
 
-function norm(s: string) {
-  return s.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+const CITIES = [
+  "Bogotá", "Medellín", "Cali", "Barranquilla", "Cartagena",
+  "Bucaramanga", "Pereira", "Manizales", "Santa Marta", "Cúcuta",
+  "Ibagué", "Sincelejo", "Montería", "Valledupar", "Pasto",
+  "Neiva", "Armenia", "Villavicencio", "Popayán", "Tunja",
+];
+
+function normCity(s: string) {
+  return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
 }
 
-function guessFilenameFromDishName(dishName: string): string | null {
-  const n = norm(dishName);
-  if (n.includes("bandeja")) return "bandeja-paisa.jpg";
-  if (n.includes("ajiaco")) return "ajiaco.jpg";
-  if (n.includes("mondongo")) return "mondongo.jpg";
-  if (n.includes("mote")) return "mote-de-queso.jpg";
-  if (n.includes("carbonara")) return "pasta-carbonara.jpg";
-  if (n.includes("pizza") && n.includes("margarita")) return "pizza-margarita.jpg";
-  if (n.includes("hamburguesa") && n.includes("doble")) return "hamburguesa-doble.jpg";
-  if (n.includes("hamburguesa") && n.includes("vegana")) return "hamburguesa-vegana.jpg";
-  if (n.includes("hamburguesa") && n.includes("artesanal")) return "hamburguesa-artesanal.jpg";
-  if (n.includes("hamburguesa")) return "hamburguesa-clasica.jpg";
-  if (n.includes("lasa")) return "lasana-vegana.jpg";
-  if (n.includes("mojarra")) return "mojarra-frita.jpg";
-  if (n.includes("pargo")) return "pargo-rojo-frito.jpg";
-  if (n.includes("cazuela")) return "cazuela-mariscos.jpg";
-  if (n.includes("desayuno")) return "desayuno-campesino.jpg";
-  if (n.includes("cafe")) return "cafe-especial.jpg";
-  if (n.includes("smoothie")) return "smoothie-antioxidante.jpg";
-  if (n.includes("wrap")) return "wrap-vegetal.jpg";
-  if (n.includes("papas")) return "papas-artesanales.jpg";
-  if (n.includes("tacos")) return "tacos-al-pastor.jpg";
-  if (n.includes("burrito")) return "burrito-mixto.jpg";
-  return null;
-}
-
-function pickLocalImage(imageUrl: string | undefined, dishName: string) {
-  if (imageUrl && imageUrl.trim()) {
-    const filename = imageUrl.trim().split("/").pop() || imageUrl.trim();
-    return DISH_IMAGES[filename] ?? PLACEHOLDER_IMG;
-  }
-  const guessed = guessFilenameFromDishName(dishName);
-  if (guessed && DISH_IMAGES[guessed]) return DISH_IMAGES[guessed];
-  return PLACEHOLDER_IMG;
-}
-
-function pickImageSource(item: DishItem) {
+function pickImageSource(item: DishItem): { uri: string } | null {
   if (item.imageUri) return { uri: item.imageUri };
-  if (item.imageUrl && item.imageUrl.startsWith("http")) return { uri: item.imageUrl };
-  return pickLocalImage(item.imageUrl, item.name);
+  if (item.imageUrl?.startsWith("/uploads")) return { uri: BASE_URL + item.imageUrl };
+  if (item.imageUrl?.startsWith("http")) return { uri: item.imageUrl };
+  return null;
 }
 
 function buildRestaurantMap(restaurants: BackendRestaurant[]) {
@@ -146,6 +105,12 @@ function buildDiscountRestaurantSet(promotions: BackendPromotion[]) {
     if (active) set.add(rid);
   }
   return set;
+}
+
+function isNewDish(createdAt: string | undefined): boolean {
+  if (!createdAt) return false;
+  const diff = Date.now() - new Date(createdAt).getTime();
+  return diff / (1000 * 60 * 60 * 24) < 7;
 }
 
 function dishToItem(
@@ -169,53 +134,68 @@ function dishToItem(
     aceptaReserva: Boolean(d.acepta_reserva),
     imageUrl: d.imagen_url || "",
     source: "backend",
+    created_at: (d as any).created_at,
+    distancia_km: d.distancia_km,
   };
 }
+
+const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<DishItem>);
 
 export default function HomeScreen() {
   const router = useRouter();
 
   const [query, setQuery] = useState("");
-  const [city, setCity] = useState<string | null>(null);
-  const [onlyDiscounts, setOnlyDiscounts] = useState(false);
-
+  const [activeFilter, setActiveFilter] = useState<FilterChip>("popular");
   const [items, setItems] = useState<DishItem[]>([]);
-  const [cities, setCities] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-
   const [searchResults, setSearchResults] = useState<DishItem[] | null>(null);
   const [isSearching, setIsSearching] = useState(false);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [cityInput, setCityInput] = useState("");
+  const [citySelected, setCitySelected] = useState<string | null>(null);
+  const [cityDropdownOpen, setCityDropdownOpen] = useState(false);
+
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rmapRef = useRef<Map<number, string>>(new Map());
   const discountSetRef = useRef<Set<number>>(new Set());
+  const scrollY = useSharedValue(0);
+
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (e) => { scrollY.value = e.contentOffset.y; },
+  });
+
+  const headerStyle = useAnimatedStyle(() => ({
+    height: interpolate(scrollY.value, [0, 60], [100, 56], "clamp"),
+  }));
+
+  const subtitleStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(scrollY.value, [0, 40], [1, 0], "clamp"),
+  }));
+
+  const filteredCities = useMemo(() => {
+    if (!cityInput.trim()) return CITIES;
+    return CITIES.filter((c) => normCity(c).includes(normCity(cityInput)));
+  }, [cityInput]);
 
   async function loadData(mode: "initial" | "refresh") {
     if (mode === "initial") setLoading(true);
-    if (mode === "refresh") setRefreshing(true);
-
+    else setRefreshing(true);
     try {
       const [dishes, restaurants, promotions, localDishes] = await Promise.all([
-        fetchBackendDishes(),
+        fetchBackendDishes("popular"),
         fetchBackendRestaurants(),
         fetchBackendPromotions(),
         getPublicDishes(),
       ]);
-
       const rmap = buildRestaurantMap(restaurants);
       const discountSet = buildDiscountRestaurantSet(promotions);
       rmapRef.current = rmap;
       discountSetRef.current = discountSet;
 
-      const uniqueCities = Array.from(
-        new Set(restaurants.map((r) => r.ciudad ?? "").filter(Boolean))
-      ).sort();
-      setCities(uniqueCities);
-
       const backendItems = (dishes as BackendDish[]).map((d) =>
         dishToItem(d, rmap, discountSet)
       );
-
       const localItems: DishItem[] = localDishes
         .filter((d: any) => d.available !== false)
         .map((d: any) => ({
@@ -233,73 +213,87 @@ export default function HomeScreen() {
           imageUri: d.imageUri,
           source: "local" as const,
         }));
-
       setItems([...localItems, ...backendItems]);
-    } catch (e) {
+    } catch {
       if (mode === "initial") setItems([]);
     } finally {
       if (mode === "initial") setLoading(false);
-      if (mode === "refresh") setRefreshing(false);
+      else setRefreshing(false);
     }
   }
 
+  useEffect(() => { loadData("initial"); }, []);
+
+  // Fix 2 — geolocalización con log de debug
   useEffect(() => {
-    loadData("initial");
+    async function getLocation() {
+      console.log("pidiendo ubicacion...");
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === "granted") {
+        const loc = await Location.getCurrentPositionAsync({});
+        setUserLocation({ lat: loc.coords.latitude, lng: loc.coords.longitude });
+        console.log("ubicacion obtenida:", loc.coords.latitude, loc.coords.longitude);
+      } else {
+        console.log("permiso de ubicacion denegado:", status);
+      }
+    }
+    getLocation();
   }, []);
 
-  // Búsqueda predictiva con debounce 300ms
   useEffect(() => {
     const q = query.trim();
-
     if (!q) {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       setSearchResults(null);
       setIsSearching(false);
       return;
     }
-
     setIsSearching(true);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-
     debounceRef.current = setTimeout(async () => {
       try {
-        const results = await searchBackendDishes(q);
+        const sort = activeFilter === "popular" ? "popular" : undefined;
+        const results = await searchBackendDishes(q, userLocation?.lat, userLocation?.lng, sort);
         const mapped = results.map((d) =>
           dishToItem(d, rmapRef.current, discountSetRef.current)
         );
         setSearchResults(mapped);
-        if (mapped.length === 0) logDemand(q, city);
+        if (mapped.length === 0) logDemand(q, null);
       } catch {
         setSearchResults([]);
       } finally {
         setIsSearching(false);
       }
     }, 300);
-
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, [query]);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [query, userLocation, activeFilter]);
 
   const filteredItems = useMemo(() => {
-    const base = searchResults !== null ? searchResults : items;
-    const c = city ? norm(city) : null;
-    return base
-      .filter((i) => (c ? norm(i.city) === c : true))
-      .filter((i) => (onlyDiscounts ? i.hasDiscount : true));
-  }, [items, searchResults, city, onlyDiscounts]);
+    let base = searchResults !== null ? searchResults : items;
 
-  const hasActiveFilters = query.length > 0 || !!city || onlyDiscounts;
+    // Fix 3 — filtro por ciudad seleccionada
+    if (citySelected) {
+      const norm = normCity(citySelected);
+      base = base.filter((i) => normCity(i.city).includes(norm));
+    }
 
-  function clearFilters() {
-    setQuery("");
-    setCity(null);
-    setOnlyDiscounts(false);
-    setSearchResults(null);
-    Keyboard.dismiss();
-  }
+    // Fix 4 — chip "Populares" → servidor ya ordenó por views
+    // chip "Cerca de ti" → ordenar por distancia
+    if (activeFilter === "new") return base.filter((i) => isNewDish(i.created_at));
+    if (activeFilter === "nearby") {
+      return [...base].sort((a, b) => {
+        if (a.distancia_km !== undefined && b.distancia_km !== undefined)
+          return a.distancia_km - b.distancia_km;
+        if (a.distancia_km !== undefined) return -1;
+        if (b.distancia_km !== undefined) return 1;
+        return 0;
+      });
+    }
+    return base;
+  }, [items, searchResults, activeFilter, citySelected]);
 
   function openDish(item: DishItem) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (item.source === "backend") {
       router.push(`/dish/${item.dishId}`);
       return;
@@ -307,113 +301,216 @@ export default function HomeScreen() {
     alert("Este plato fue creado localmente. El detalle público se conectará pronto.");
   }
 
+  function closeCityDropdown() {
+    setCityDropdownOpen(false);
+    Keyboard.dismiss();
+  }
+
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={s.loadingWrap}>
         <ActivityIndicator size="large" color="#E8521A" />
-        <Text style={{ marginTop: 10, color: "#666" }}>Cargando platos...</Text>
+        <Text style={s.loadingText}>Cargando platos...</Text>
       </View>
     );
   }
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1 }}
+      style={s.root}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-        <View style={styles.container}>
-          <Text style={styles.title}>🍽️ DishQuest</Text>
+      <TouchableWithoutFeedback
+        onPress={closeCityDropdown}
+        accessible={false}
+      >
+        <View style={s.root}>
+          {/* Header oscuro animado */}
+          <Animated.View style={[s.header, headerStyle]}>
+            <Text style={s.headerTitle}>DishQuest</Text>
+            <Animated.Text style={[s.headerSub, subtitleStyle]}>
+              Encuentra el plato que tienes antojo
+            </Animated.Text>
+          </Animated.View>
 
-          <FiltersBar
-            query={query}
-            onQueryChange={setQuery}
-            city={city}
-            onCityChange={setCity}
-            onlyDiscounts={onlyDiscounts}
-            onToggleDiscounts={() => setOnlyDiscounts((v) => !v)}
-            cities={cities}
-            isSearching={isSearching}
-          />
-
-          {hasActiveFilters && (
-            <View style={styles.activeBar}>
-              <Text style={styles.activeText}>
-                {query ? `"${query}"` : ""}
-                {city ? ` · ${city}` : ""}
-                {onlyDiscounts ? " · Descuento" : ""}
-                {searchResults !== null
-                  ? ` · ${filteredItems.length} resultado${filteredItems.length !== 1 ? "s" : ""}`
-                  : ""}
-              </Text>
-              <Pressable onPress={clearFilters}>
-                <Text style={styles.clear}>Limpiar</Text>
-              </Pressable>
+          {/* Buscador */}
+          <View style={s.searchWrap}>
+            <View style={s.searchBox}>
+              <Text style={s.searchIcon}>🔍</Text>
+              <TextInput
+                style={s.searchInput}
+                placeholder="Buscar platos, restaurantes..."
+                placeholderTextColor="rgba(255,255,255,0.30)"
+                value={query}
+                onChangeText={setQuery}
+                onFocus={() => setCityDropdownOpen(false)}
+              />
+              {query.length > 0 && (
+                <Pressable hitSlop={10} onPress={() => { setQuery(""); setSearchResults(null); }}>
+                  <Text style={s.clearX}>✕</Text>
+                </Pressable>
+              )}
             </View>
-          )}
+          </View>
 
-          <FlatList
+          {/* Chips de filtro */}
+          <View style={s.chips}>
+            {FILTERS.map((f) => (
+              <Pressable
+                key={f.key}
+                style={[s.chip, activeFilter === f.key && s.chipOn]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setActiveFilter(f.key);
+                  setCityDropdownOpen(false);
+                }}
+              >
+                <Text style={[s.chipText, activeFilter === f.key && s.chipTextOn]}>
+                  {f.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+
+          {/* Fix 3 — Filtro ciudad predictivo */}
+          <View style={s.cityWrap}>
+            <View style={s.cityBox}>
+              <Text style={s.cityIcon}>🏙️</Text>
+              <TextInput
+                style={s.cityInput}
+                placeholder="Ciudad..."
+                placeholderTextColor="rgba(255,255,255,0.30)"
+                value={citySelected ?? cityInput}
+                onChangeText={(t) => {
+                  setCitySelected(null);
+                  setCityInput(t);
+                  setCityDropdownOpen(t.length > 0);
+                }}
+                onFocus={() => {
+                  if (!citySelected) setCityDropdownOpen(cityInput.length > 0 || true);
+                }}
+              />
+              {(citySelected !== null || cityInput.length > 0) && (
+                <Pressable
+                  hitSlop={10}
+                  onPress={() => {
+                    setCitySelected(null);
+                    setCityInput("");
+                    setCityDropdownOpen(false);
+                  }}
+                >
+                  <Text style={s.clearX}>✕</Text>
+                </Pressable>
+              )}
+            </View>
+
+            {cityDropdownOpen && filteredCities.length > 0 && (
+              <View style={s.cityDropdown}>
+                {filteredCities.slice(0, 8).map((city) => (
+                  <Pressable
+                    key={city}
+                    style={s.cityOption}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setCitySelected(city);
+                      setCityInput("");
+                      setCityDropdownOpen(false);
+                      Keyboard.dismiss();
+                    }}
+                  >
+                    <Text style={s.cityOptionText}>📍 {city}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+          </View>
+
+          {/* Lista */}
+          <AnimatedFlatList
             data={filteredItems}
             keyExtractor={(item) => item.dishId}
             refreshing={refreshing}
             onRefresh={() => loadData("refresh")}
+            onScroll={scrollHandler}
+            scrollEventThrottle={16}
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ paddingBottom: 20, gap: 12 }}
-            renderItem={({ item }) => (
-              <Pressable style={styles.card} onPress={() => openDish(item)}>
-                <Image source={pickImageSource(item)} style={styles.thumb} />
-                <View style={styles.cardBody}>
-                  <View style={styles.row}>
-                    <Text style={styles.name}>{item.name}</Text>
-                    {item.tieneDescuento && (
-                      <View style={styles.badge}>
-                        <Text style={styles.badgeText}>
-                          {item.porcentajeDescuento > 0 ? `${item.porcentajeDescuento}% OFF` : "PROMO"}
+            contentContainerStyle={s.listPad}
+            renderItem={({ item, index }) => {
+              const src = pickImageSource(item);
+              return (
+                <Animated.View entering={FadeInDown.delay(Math.min(index, 12) * 65)}>
+                  <Pressable
+                    style={s.card}
+                    onPress={() => openDish(item)}
+                    onPressIn={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
+                  >
+                    {src ? (
+                      <Image source={src} style={s.thumb} resizeMode="cover" />
+                    ) : (
+                      <LinearGradient colors={["#E8521A", "#FF8C42"]} style={s.thumb}>
+                        <Text style={s.thumbLetter}>
+                          {item.name.charAt(0).toUpperCase()}
                         </Text>
+                      </LinearGradient>
+                    )}
+
+                    <View style={s.cardBody}>
+                      <View style={s.nameRow}>
+                        <Text style={s.dishName} numberOfLines={1}>{item.name}</Text>
+                        {item.hasDiscount && (
+                          <View style={s.badgeHot}>
+                            <Text style={s.badgeText}>Más pedido</Text>
+                          </View>
+                        )}
+                        {isNewDish(item.created_at) && (
+                          <View style={s.badgeNew}>
+                            <Text style={s.badgeText}>Nuevo</Text>
+                          </View>
+                        )}
                       </View>
-                    )}
-                  </View>
-                  <Text style={styles.sub}>{item.restaurantName}</Text>
-                  <View style={styles.priceRow}>
-                    <Text style={styles.price}>${item.price.toLocaleString("es-CO")}</Text>
-                    {item.tieneDescuento && item.porcentajeDescuento > 0 && (
-                      <Text style={styles.priceOriginal}>
-                        ${Math.round(item.price / (1 - item.porcentajeDescuento / 100)).toLocaleString("es-CO")}
+                      <Text style={s.restaurant} numberOfLines={1}>
+                        {item.restaurantName}
                       </Text>
-                    )}
-                  </View>
-                  <Text style={styles.city}>{item.city}</Text>
-                  {(item.aceptaDomicilio || item.aceptaReserva) && (
-                    <View style={styles.actionsRow}>
-                      {item.aceptaDomicilio && (
-                        <Pressable
-                          style={styles.actionBtn}
-                          onPress={(e) => { e.stopPropagation(); openDish(item); }}
-                          hitSlop={8}
-                        >
-                          <Text style={styles.actionBtnText}>🛵 Domicilio</Text>
-                        </Pressable>
-                      )}
-                      {item.aceptaReserva && (
-                        <Pressable
-                          style={[styles.actionBtn, styles.reservaBtn]}
-                          onPress={(e) => { e.stopPropagation(); openDish(item); }}
-                          hitSlop={8}
-                        >
-                          <Text style={[styles.actionBtnText, styles.reservaBtnText]}>📅 Reservar</Text>
-                        </Pressable>
-                      )}
+                      <View style={s.priceRow}>
+                        <Text style={s.price}>
+                          ${item.price.toLocaleString("es-CO")}
+                        </Text>
+                        {item.tieneDescuento && item.porcentajeDescuento > 0 && (
+                          <Text style={s.priceStrike}>
+                            ${Math.round(
+                              item.price / (1 - item.porcentajeDescuento / 100)
+                            ).toLocaleString("es-CO")}
+                          </Text>
+                        )}
+                      </View>
+                      {(item.city || item.distancia_km !== undefined) ? (
+                        <Text style={s.location} numberOfLines={1}>
+                          {item.distancia_km !== undefined
+                            ? `📍 ${item.distancia_km.toFixed(1)} km${item.city ? ` · ${item.city}` : ""}`
+                            : `📍 ${item.city}`}
+                        </Text>
+                      ) : null}
                     </View>
-                  )}
-                  {item.source === "local" && (
-                    <Text style={styles.localTag}>Plato registrado por socio</Text>
-                  )}
-                </View>
-              </Pressable>
-            )}
+
+                    {item.aceptaDomicilio && (
+                      <Pressable
+                        style={s.waBtn}
+                        hitSlop={8}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                          openDish(item);
+                        }}
+                      >
+                        <Text style={s.waIcon}>💬</Text>
+                      </Pressable>
+                    )}
+                  </Pressable>
+                </Animated.View>
+              );
+            }}
             ListEmptyComponent={
-              <Text style={styles.empty}>
-                {isSearching ? "Buscando..." : "No hay resultados."}
+              <Text style={s.empty}>
+                {isSearching ? "Buscando..." : "No hay platos disponibles."}
               </Text>
             }
           />
@@ -423,46 +520,126 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: "#FFF8F0" },
-  title: { fontSize: 24, fontWeight: "700", marginBottom: 12, color: "#1A1A1A" },
-  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
-  activeBar: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: "#f5f5f5",
-    padding: 10,
-    borderRadius: 10,
-    marginBottom: 10,
+const s = StyleSheet.create({
+  root: { flex: 1, backgroundColor: "#0D0D0D" },
+  loadingWrap: {
+    flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#0D0D0D",
   },
-  activeText: { fontSize: 12, color: "#333", flex: 1 },
-  clear: { fontSize: 12, fontWeight: "600", color: "#E8521A" },
-  card: { flexDirection: "row", gap: 12, padding: 12, borderRadius: 12, backgroundColor: "#fff" },
-  thumb: { width: 74, height: 74, borderRadius: 12, backgroundColor: "#e6e6e6" },
-  cardBody: { flex: 1 },
-  row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 },
-  badge: { backgroundColor: "#E8521A", borderRadius: 999, paddingHorizontal: 12, paddingVertical: 5 },
-  badgeText: { color: "#fff", fontWeight: "700", fontSize: 11 },
-  name: { fontSize: 16, fontWeight: "700", flex: 1, color: "#1A1A1A" },
-  sub: { marginTop: 2, fontSize: 13, color: "#444" },
-  priceRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6 },
-  price: { fontSize: 14, fontWeight: "700", color: "#E8521A" },
-  priceOriginal: { fontSize: 12, color: "#aaa", textDecorationLine: "line-through" },
-  city: { marginTop: 4, fontSize: 13, color: "#555" },
-  actionsRow: { flexDirection: "row", gap: 8, marginTop: 10 },
-  actionBtn: {
-    minHeight: 48,
+  loadingText: { marginTop: 10, color: "#555" },
+
+  header: {
+    backgroundColor: "#0D0D0D",
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  headerTitle: { fontSize: 26, fontWeight: "800", color: "#FFFFFF", letterSpacing: -0.5 },
+  headerSub: { fontSize: 13, color: "rgba(255,255,255,0.45)", marginTop: 3 },
+
+  searchWrap: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 10 },
+  searchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#1A1A1A",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#333",
+    paddingHorizontal: 12,
+    height: 46,
+    gap: 8,
+  },
+  searchIcon: { fontSize: 16 },
+  searchInput: { flex: 1, fontSize: 14, color: "#FFFFFF" },
+  clearX: { fontSize: 14, color: "#555", paddingHorizontal: 4 },
+
+  chips: { flexDirection: "row", paddingHorizontal: 16, gap: 8, marginBottom: 10 },
+  chip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: "#1A1A1A" },
+  chipOn: { backgroundColor: "#E8521A" },
+  chipText: { fontSize: 13, fontWeight: "600", color: "#666" },
+  chipTextOn: { color: "#FFFFFF" },
+
+  cityWrap: { marginHorizontal: 16, marginBottom: 14, zIndex: 10 },
+  cityBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#1A1A1A",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#333",
+    paddingHorizontal: 12,
+    height: 42,
+    gap: 8,
+  },
+  cityIcon: { fontSize: 14 },
+  cityInput: { flex: 1, fontSize: 14, color: "#FFFFFF" },
+  cityDropdown: {
+    position: "absolute",
+    top: 44,
+    left: 0,
+    right: 0,
+    backgroundColor: "#1A1A1A",
+    borderWidth: 1,
+    borderColor: "#333",
+    borderRadius: 12,
+    overflow: "hidden",
+    zIndex: 20,
+    elevation: 20,
+  },
+  cityOption: {
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: "#E8521A",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#2A2A2A",
+  },
+  cityOptionText: { fontSize: 14, color: "#FFFFFF" },
+
+  listPad: { paddingHorizontal: 16, paddingBottom: 24 },
+
+  card: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#1A1A1A",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#2A2A2A",
+    padding: 12,
+    marginBottom: 10,
+    gap: 12,
+  },
+  thumb: {
+    width: 80,
+    height: 80,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
+    backgroundColor: "#2A2A2A",
+  },
+  thumbLetter: { fontSize: 36, fontWeight: "800", color: "rgba(255,255,255,0.9)" },
+
+  cardBody: { flex: 1, gap: 3 },
+  nameRow: { flexDirection: "row", alignItems: "center", gap: 5, flexWrap: "nowrap" },
+  dishName: { fontSize: 15, fontWeight: "700", color: "#FFFFFF", flex: 1 },
+  badgeHot: { backgroundColor: "#E8521A", borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  badgeNew: { backgroundColor: "#2D8C4E", borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  badgeText: { fontSize: 9, fontWeight: "700", color: "#FFFFFF" },
+
+  restaurant: { fontSize: 12, color: "#999" },
+  priceRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 },
+  price: { fontSize: 16, fontWeight: "700", color: "#E8521A" },
+  priceStrike: { fontSize: 11, color: "#444", textDecorationLine: "line-through" },
+  location: { fontSize: 11, color: "#555", marginTop: 1 },
+
+  waBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#25D366",
     justifyContent: "center",
     alignItems: "center",
   },
-  actionBtnText: { color: "#fff", fontWeight: "700", fontSize: 13 },
-  reservaBtn: { backgroundColor: "#111" },
-  reservaBtnText: { color: "#fff" },
-  localTag: { marginTop: 6, fontSize: 12, fontWeight: "600", color: "#E8521A" },
-  empty: { textAlign: "center", marginTop: 30, color: "#666" },
+  waIcon: { fontSize: 18 },
+
+  empty: { textAlign: "center", marginTop: 50, color: "#444", fontSize: 15 },
 });

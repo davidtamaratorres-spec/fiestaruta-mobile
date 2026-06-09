@@ -13,6 +13,8 @@ import {
   Text,
   View,
 } from "react-native";
+import Animated, { FadeInRight } from "react-native-reanimated";
+import * as Haptics from "expo-haptics";
 
 import { backendDelete, backendGet, backendPost } from "./services/backendApi";
 import { authService } from "./partner/services/AuthService";
@@ -94,6 +96,7 @@ export default function PartnerDashboard() {
   }
 
   function confirmDelete(plato: Plato) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     Alert.alert(
       "Eliminar plato",
       `¿Eliminar "${plato.nombre}"? Esta acción no se puede deshacer.`,
@@ -174,6 +177,7 @@ export default function PartnerDashboard() {
     setAiSelected(new Set());
     const dishes = await backendGet<Plato[]>("/partner/platos");
     setPlatos(dishes);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     Alert.alert("Importación completa", `Se importaron ${importados} plato${importados !== 1 ? "s" : ""} correctamente.`);
   }
 
@@ -182,6 +186,7 @@ export default function PartnerDashboard() {
     try {
       await backendDelete(`/partner/platos/${id}`);
       setPlatos((prev) => prev.filter((p) => p.id !== id));
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e: any) {
       Alert.alert("Error", e.message || "No se pudo eliminar el plato.");
     } finally {
@@ -273,66 +278,68 @@ export default function PartnerDashboard() {
           keyExtractor={(p) => String(p.id)}
           scrollEnabled={false}
           contentContainerStyle={{ gap: 10 }}
-          renderItem={({ item }) => (
-            <View style={styles.platoCard}>
-              <View style={styles.platoTop}>
-                <View style={styles.platoInfo}>
-                  <Text style={styles.platoNombre}>{item.nombre}</Text>
-                  {item.categoria ? (
-                    <Text style={styles.platoCategoria}>{item.categoria}</Text>
-                  ) : null}
-                  <Text style={styles.platoPrecio}>
-                    ${item.precio.toLocaleString("es-CO")}
-                  </Text>
-                  {item.descripcion ? (
-                    <Text style={styles.platoDesc} numberOfLines={2}>
-                      {item.descripcion}
+          renderItem={({ item, index }) => (
+            <Animated.View entering={FadeInRight.delay(index * 60)}>
+              <View style={styles.platoCard}>
+                <View style={styles.platoTop}>
+                  <View style={styles.platoInfo}>
+                    <Text style={styles.platoNombre}>{item.nombre}</Text>
+                    {item.categoria ? (
+                      <Text style={styles.platoCategoria}>{item.categoria}</Text>
+                    ) : null}
+                    <Text style={styles.platoPrecio}>
+                      ${item.precio.toLocaleString("es-CO")}
                     </Text>
-                  ) : null}
-                </View>
-                <View style={styles.statusCol}>
-                  {item.disponible === 0 ? (
-                    <View style={styles.inactiveBadge}>
-                      <Text style={styles.inactiveText}>Inactivo</Text>
-                    </View>
-                  ) : (
-                    <View style={styles.activeBadge}>
-                      <Text style={styles.activeText}>Activo</Text>
-                    </View>
-                  )}
-                  {item.tiene_descuento ? (
-                    <View style={styles.discountBadge}>
-                      <Text style={styles.discountText}>
-                        {Number(item.porcentaje_descuento) > 0
-                          ? `${item.porcentaje_descuento}% OFF`
-                          : "PROMO"}
+                    {item.descripcion ? (
+                      <Text style={styles.platoDesc} numberOfLines={2}>
+                        {item.descripcion}
                       </Text>
-                    </View>
-                  ) : null}
+                    ) : null}
+                  </View>
+                  <View style={styles.statusCol}>
+                    {item.disponible === 0 ? (
+                      <View style={styles.inactiveBadge}>
+                        <Text style={styles.inactiveText}>Inactivo</Text>
+                      </View>
+                    ) : (
+                      <View style={styles.activeBadge}>
+                        <Text style={styles.activeText}>Activo</Text>
+                      </View>
+                    )}
+                    {item.tiene_descuento ? (
+                      <View style={styles.discountBadge}>
+                        <Text style={styles.discountText}>
+                          {Number(item.porcentaje_descuento) > 0
+                            ? `${item.porcentaje_descuento}% OFF`
+                            : "PROMO"}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                </View>
+
+                {/* Botones Editar / Eliminar */}
+                <View style={styles.platoActions}>
+                  <Pressable
+                    style={styles.editBtn}
+                    onPress={() => router.push(`/partner/edit-dish?id=${item.id}`)}
+                  >
+                    <Text style={styles.editBtnText}>Editar</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.deleteBtn, deletingId === item.id && styles.btnDisabled]}
+                    onPress={() => confirmDelete(item)}
+                    disabled={deletingId === item.id}
+                  >
+                    {deletingId === item.id ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={styles.deleteBtnText}>Eliminar</Text>
+                    )}
+                  </Pressable>
                 </View>
               </View>
-
-              {/* Botones Editar / Eliminar */}
-              <View style={styles.platoActions}>
-                <Pressable
-                  style={styles.editBtn}
-                  onPress={() => router.push(`/partner/edit-dish?id=${item.id}`)}
-                >
-                  <Text style={styles.editBtnText}>Editar</Text>
-                </Pressable>
-                <Pressable
-                  style={[styles.deleteBtn, deletingId === item.id && styles.btnDisabled]}
-                  onPress={() => confirmDelete(item)}
-                  disabled={deletingId === item.id}
-                >
-                  {deletingId === item.id ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Text style={styles.deleteBtnText}>Eliminar</Text>
-                  )}
-                </Pressable>
-              </View>
-            </View>
+            </Animated.View>
           )}
         />
       )}

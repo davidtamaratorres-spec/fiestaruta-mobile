@@ -1,3 +1,4 @@
+import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -11,6 +12,16 @@ import {
   Text,
   View,
 } from "react-native";
+import Animated, {
+  SlideInUp,
+  FadeIn,
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withRepeat,
+  withSequence,
+} from "react-native-reanimated";
+import * as Haptics from "expo-haptics";
 
 import { BASE_URL, backendGet } from "../services/backendApi";
 
@@ -36,78 +47,6 @@ type DishDetail = {
   restaurante_email?: string;
 };
 
-const PLACEHOLDER_IMG = require("../../assets/images/dish-placeholder.png");
-const DISH_IMAGES: Record<string, any> = {
-  "ajiaco.jpg": require("../../assets/images/dishes/ajiaco.jpg"),
-  "arroz-con-camarones.jpg": require("../../assets/images/dishes/arroz-con-camarones.jpg"),
-  "bandeja-paisa.jpg": require("../../assets/images/dishes/bandeja-paisa.jpg"),
-  "bowl-vegano-energetico.jpg": require("../../assets/images/dishes/bowl-vegano-energetico.jpg"),
-  "burrito-mixto.jpg": require("../../assets/images/dishes/burrito-mixto.jpg"),
-  "cafe-especial.jpg": require("../../assets/images/dishes/cafe-especial.jpg"),
-  "cazuela-mariscos.jpg": require("../../assets/images/dishes/cazuela-mariscos.jpg"),
-  "chorizo-artesanal.jpg": require("../../assets/images/dishes/chorizo-artesanal.jpg"),
-  "churrasco-parrilla.jpg": require("../../assets/images/dishes/churrasco-parrilla.jpg"),
-  "costillas-bbq.jpg": require("../../assets/images/dishes/costillas-bbq.jpg"),
-  "desayuno-campesino.jpg": require("../../assets/images/dishes/desayuno-campesino.jpg"),
-  "hamburguesa-artesanal.jpg": require("../../assets/images/dishes/hamburguesa-artesanal.jpg"),
-  "hamburguesa-clasica.jpg": require("../../assets/images/dishes/hamburguesa-clasica.jpg"),
-  "hamburguesa-doble.jpg": require("../../assets/images/dishes/hamburguesa-doble.jpg"),
-  "hamburguesa-vegana.jpg": require("../../assets/images/dishes/hamburguesa-vegana.jpg"),
-  "lasana-vegana.jpg": require("../../assets/images/dishes/lasana-vegana.jpg"),
-  "mojarra-frita.jpg": require("../../assets/images/dishes/mojarra-frita.jpg"),
-  "mondongo.jpg": require("../../assets/images/dishes/mondongo.jpg"),
-  "mote-de-queso.jpg": require("../../assets/images/dishes/mote-de-queso.jpg"),
-  "papas-artesanales.jpg": require("../../assets/images/dishes/papas-artesanales.jpg"),
-  "pargo-rojo-frito.jpg": require("../../assets/images/dishes/pargo-rojo-frito.jpg"),
-  "pasta-carbonara.jpg": require("../../assets/images/dishes/pasta-carbonara.jpg"),
-  "perro-caliente-especial.jpg": require("../../assets/images/dishes/perro-caliente-especial.jpg"),
-  "pizza-margarita.jpg": require("../../assets/images/dishes/pizza-margarita.jpg"),
-  "punta-de-anca.jpg": require("../../assets/images/dishes/punta-de-anca.jpg"),
-  "smoothie-antioxidante.jpg": require("../../assets/images/dishes/smoothie-antioxidante.jpg"),
-  "tacos-al-pastor.jpg": require("../../assets/images/dishes/tacos-al-pastor.jpg"),
-  "wrap-vegetal.jpg": require("../../assets/images/dishes/wrap-vegetal.jpg"),
-};
-
-function norm(s: string) {
-  return s.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-}
-
-function guessImage(name: string): string | null {
-  const n = norm(name);
-  if (n.includes("churrasco")) return "churrasco-parrilla.jpg";
-  if (n.includes("chorizo")) return "chorizo-artesanal.jpg";
-  if (n.includes("bandeja")) return "bandeja-paisa.jpg";
-  if (n.includes("ajiaco")) return "ajiaco.jpg";
-  if (n.includes("mondongo")) return "mondongo.jpg";
-  if (n.includes("mote")) return "mote-de-queso.jpg";
-  if (n.includes("carbonara")) return "pasta-carbonara.jpg";
-  if (n.includes("pizza")) return "pizza-margarita.jpg";
-  if (n.includes("hamburguesa") && n.includes("doble")) return "hamburguesa-doble.jpg";
-  if (n.includes("hamburguesa") && n.includes("vegana")) return "hamburguesa-vegana.jpg";
-  if (n.includes("hamburguesa") && n.includes("artesanal")) return "hamburguesa-artesanal.jpg";
-  if (n.includes("hamburguesa")) return "hamburguesa-clasica.jpg";
-  if (n.includes("lasa")) return "lasana-vegana.jpg";
-  if (n.includes("mojarra")) return "mojarra-frita.jpg";
-  if (n.includes("pargo")) return "pargo-rojo-frito.jpg";
-  if (n.includes("cazuela")) return "cazuela-mariscos.jpg";
-  if (n.includes("desayuno")) return "desayuno-campesino.jpg";
-  if (n.includes("smoothie")) return "smoothie-antioxidante.jpg";
-  if (n.includes("wrap")) return "wrap-vegetal.jpg";
-  if (n.includes("papas")) return "papas-artesanales.jpg";
-  if (n.includes("tacos")) return "tacos-al-pastor.jpg";
-  if (n.includes("burrito")) return "burrito-mixto.jpg";
-  return null;
-}
-
-function pickImage(imageUrl: string | undefined, name: string) {
-  if (imageUrl?.trim()) {
-    if (imageUrl.startsWith("http")) return { uri: imageUrl };
-    const filename = imageUrl.trim().split("/").pop() || imageUrl.trim();
-    if (DISH_IMAGES[filename]) return DISH_IMAGES[filename];
-  }
-  const guessed = guessImage(name);
-  return (guessed && DISH_IMAGES[guessed]) ? DISH_IMAGES[guessed] : PLACEHOLDER_IMG;
-}
 
 function openWhatsApp(whatsapp: string, dishName: string) {
   const clean = whatsapp.replace(/\D/g, "");
@@ -137,6 +76,26 @@ export default function DishDetail() {
   const [error, setError] = useState<string | null>(null);
 
   const idNum = useMemo(() => Number(id), [id]);
+
+  const priceAnimated = useSharedValue(0);
+  const whatsappScale = useSharedValue(1);
+
+  useEffect(() => {
+    if (dish) {
+      priceAnimated.value = withTiming(dish.precio, { duration: 800 });
+      whatsappScale.value = withRepeat(
+        withSequence(
+          withTiming(1.05, { duration: 600 }),
+          withTiming(1, { duration: 600 })
+        ),
+        -1
+      );
+    }
+  }, [dish]);
+
+  const whatsappAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: whatsappScale.value }],
+  }));
 
   useEffect(() => {
     let active = true;
@@ -196,7 +155,17 @@ export default function DishDetail() {
         <Text style={styles.backText}>← Volver</Text>
       </Pressable>
 
-      <Image source={pickImage(dish.imagen_url, dish.nombre)} style={styles.hero} resizeMode="cover" />
+      {dish.imagen_url?.trim() ? (
+        <Image
+          source={{ uri: BASE_URL + dish.imagen_url }}
+          style={styles.hero}
+          resizeMode="cover"
+        />
+      ) : (
+        <LinearGradient colors={["#E8521A", "#FF8C42"]} style={[styles.hero, styles.heroGradient]}>
+          <Text style={styles.heroLetter}>{dish.nombre.charAt(0).toUpperCase()}</Text>
+        </LinearGradient>
+      )}
 
       {/* Badge descuento */}
       {tieneDescuento && (
@@ -207,7 +176,9 @@ export default function DishDetail() {
         </View>
       )}
 
-      <Text style={styles.name}>{dish.nombre}</Text>
+      <Animated.Text entering={SlideInUp.duration(400)} style={styles.name}>
+        {dish.nombre}
+      </Animated.Text>
 
       {/* Precio */}
       <View style={styles.priceRow}>
@@ -228,45 +199,58 @@ export default function DishDetail() {
       ) : null}
 
       {/* Restaurante */}
-      <Text style={styles.sectionTitle}>Restaurante</Text>
-      <Text style={styles.restaurantName}>
-        {dish.restaurante_nombre ?? `Restaurante #${dish.restaurante_id}`}
-      </Text>
-      {dish.ciudad ? <Text style={styles.info}>📍 {dish.ciudad}</Text> : null}
-      {dish.direccion ? <Text style={styles.info}>{dish.direccion}</Text> : null}
-      {dish.whatsapp ? <Text style={styles.info}>📱 {dish.whatsapp}</Text> : null}
-      {dish.restaurante_email ? <Text style={styles.info}>✉️ {dish.restaurante_email}</Text> : null}
+      <Animated.View entering={FadeIn.delay(300)} style={styles.restaurantCard}>
+        <Text style={styles.sectionTitle}>Restaurante</Text>
+        <Text style={styles.restaurantName}>
+          {dish.restaurante_nombre ?? `Restaurante #${dish.restaurante_id}`}
+        </Text>
+        {dish.ciudad ? <Text style={styles.info}>📍 {dish.ciudad}</Text> : null}
+        {dish.direccion ? <Text style={styles.info}>🏠 {dish.direccion}</Text> : null}
+        {dish.whatsapp ? <Text style={styles.info}>📱 {dish.whatsapp}</Text> : null}
+        {dish.restaurante_email ? <Text style={styles.info}>✉️ {dish.restaurante_email}</Text> : null}
+      </Animated.View>
 
       {/* Botones de acción */}
       <View style={styles.actionsSection}>
         {dish.acepta_domicilio ? (
-          <Pressable
-            style={styles.actionBtn}
-            onPress={() => dish.whatsapp
-              ? openWhatsApp(dish.whatsapp, dish.nombre)
-              : Alert.alert("Sin contacto", "Este restaurante no tiene WhatsApp registrado.")
-            }
-          >
-            <Text style={styles.actionBtnText}>🛵 Pedir domicilio</Text>
-          </Pressable>
+          <Animated.View style={whatsappAnimatedStyle}>
+            <Pressable
+              style={styles.actionBtn}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                dish.whatsapp
+                  ? openWhatsApp(dish.whatsapp, dish.nombre)
+                  : Alert.alert("Sin contacto", "Este restaurante no tiene WhatsApp registrado.");
+              }}
+            >
+              <Text style={styles.actionBtnText}>🛵 Pedir domicilio</Text>
+            </Pressable>
+          </Animated.View>
         ) : null}
 
         {dish.acepta_reserva ? (
-          <Pressable
-            style={[styles.actionBtn, styles.reservaBtn]}
-            onPress={() => dish.whatsapp
-              ? openWhatsApp(dish.whatsapp, `Reserva: ${dish.nombre}`)
-              : Alert.alert("Sin contacto", "Este restaurante no tiene WhatsApp registrado.")
-            }
-          >
-            <Text style={styles.actionBtnText}>📅 Reservar</Text>
-          </Pressable>
+          <Animated.View style={whatsappAnimatedStyle}>
+            <Pressable
+              style={[styles.actionBtn, styles.reservaBtn]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                dish.whatsapp
+                  ? openWhatsApp(dish.whatsapp, `Reserva: ${dish.nombre}`)
+                  : Alert.alert("Sin contacto", "Este restaurante no tiene WhatsApp registrado.");
+              }}
+            >
+              <Text style={styles.actionBtnText}>📅 Reservar</Text>
+            </Pressable>
+          </Animated.View>
         ) : null}
 
         {(dish.latitud || dish.direccion || dish.ciudad) ? (
           <Pressable
             style={[styles.actionBtn, styles.mapsBtn]}
-            onPress={() => openMaps(dish.latitud, dish.longitud, dish.direccion ?? "", dish.ciudad ?? "")}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              openMaps(dish.latitud, dish.longitud, dish.direccion ?? "", dish.ciudad ?? "");
+            }}
           >
             <Text style={styles.actionBtnText}>📍 Ver en mapa</Text>
           </Pressable>
@@ -281,17 +265,19 @@ export default function DishDetail() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#FFF8F0" },
+  container: { flex: 1, backgroundColor: "#0D0D0D" },
   content: { paddingBottom: 50 },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 24 },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 24, backgroundColor: "#0D0D0D" },
   muted: { color: "#666" },
-  errorText: { color: "red", fontWeight: "600", textAlign: "center" },
+  errorText: { color: "#ff6b6b", fontWeight: "600", textAlign: "center" },
   backRow: { padding: 20, paddingBottom: 8 },
-  backText: { fontSize: 14, fontWeight: "600", color: "#333" },
+  backText: { fontSize: 14, fontWeight: "600", color: "#FFFFFF" },
   backBtn: { marginTop: 12, backgroundColor: "#E8521A", padding: 14, borderRadius: 10, alignItems: "center", minWidth: 120 },
   backBtnText: { color: "#fff", fontWeight: "700" },
 
-  hero: { width: "100%", height: 240, backgroundColor: "#e6e6e6" },
+  hero: { width: "100%", height: 240, backgroundColor: "#1A1A1A" },
+  heroGradient: { justifyContent: "center", alignItems: "center" },
+  heroLetter: { fontSize: 96, fontWeight: "800", color: "rgba(255,255,255,0.9)" },
 
   discountBadge: {
     position: "absolute",
@@ -304,30 +290,40 @@ const styles = StyleSheet.create({
   },
   discountBadgeText: { color: "#fff", fontWeight: "800", fontSize: 14 },
 
-  name: { fontSize: 24, fontWeight: "700", paddingHorizontal: 20, paddingTop: 16 },
+  name: { fontSize: 24, fontWeight: "700", paddingHorizontal: 20, paddingTop: 16, color: "#FFFFFF" },
   priceRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 20, marginTop: 6 },
   price: { fontSize: 20, fontWeight: "700", color: "#E8521A" },
-  priceOld: { fontSize: 15, color: "#aaa", textDecorationLine: "line-through" },
-  categoria: { paddingHorizontal: 20, marginTop: 4, fontSize: 13, color: "#888" },
+  priceOld: { fontSize: 15, color: "#555", textDecorationLine: "line-through" },
+  categoria: { paddingHorizontal: 20, marginTop: 4, fontSize: 13, color: "#666" },
 
-  sectionTitle: { paddingHorizontal: 20, marginTop: 20, fontSize: 13, fontWeight: "700", color: "#999", textTransform: "uppercase", letterSpacing: 0.8 },
-  desc: { paddingHorizontal: 20, marginTop: 6, fontSize: 15, color: "#333", lineHeight: 22 },
+  sectionTitle: { paddingHorizontal: 20, marginTop: 20, fontSize: 12, fontWeight: "700", color: "#666", textTransform: "uppercase", letterSpacing: 1 },
+  desc: { paddingHorizontal: 20, marginTop: 6, fontSize: 15, color: "#999999", lineHeight: 22 },
 
-  restaurantName: { paddingHorizontal: 20, marginTop: 6, fontSize: 16, fontWeight: "700", color: "#111" },
-  info: { paddingHorizontal: 20, marginTop: 4, fontSize: 14, color: "#444" },
+  restaurantName: { paddingHorizontal: 20, marginTop: 6, fontSize: 16, fontWeight: "700", color: "#FFFFFF" },
+  info: { paddingHorizontal: 20, marginTop: 4, fontSize: 14, color: "#999" },
 
   actionsSection: { paddingHorizontal: 20, marginTop: 24, gap: 12 },
   actionBtn: {
     minHeight: 56,
-    backgroundColor: "#E8521A",
+    backgroundColor: "#25D366",
     borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 20,
   },
   actionBtnText: { color: "#fff", fontWeight: "700", fontSize: 16 },
-  reservaBtn: { backgroundColor: "#111" },
-  mapsBtn: { backgroundColor: "#1a73e8" },
+  reservaBtn: { backgroundColor: "#1A1A1A", borderWidth: 1, borderColor: "#2A2A2A" },
+  mapsBtn: { backgroundColor: "#E8521A" },
 
-  unavailable: { paddingHorizontal: 20, marginTop: 16, fontSize: 13, color: "#c00", fontWeight: "600" },
+  restaurantCard: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    backgroundColor: "#1A1A1A",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#2A2A2A",
+    paddingVertical: 12,
+  },
+
+  unavailable: { paddingHorizontal: 20, marginTop: 16, fontSize: 13, color: "#ff6b6b", fontWeight: "600" },
 });

@@ -21,6 +21,7 @@ export type BackendDish = {
   restaurante?: string;
   whatsapp?: string;
   maps_url?: string;
+  distancia_km?: number;
 };
 
 export type CreateBackendDishInput = {
@@ -33,13 +34,25 @@ export type CreateBackendDishInput = {
   disponible?: number;
 };
 
-export async function fetchBackendDishes(): Promise<BackendDish[]> {
-  return backendGet<BackendDish[]>(`/dishes`);
+export async function fetchBackendDishes(sort?: string): Promise<BackendDish[]> {
+  const params = new URLSearchParams();
+  if (sort) params.set("sort", sort);
+  const qs = params.toString();
+  return backendGet<BackendDish[]>(qs ? `/dishes?${qs}` : "/dishes");
 }
 
-export async function searchBackendDishes(q: string): Promise<BackendDish[]> {
+export async function searchBackendDishes(
+  q: string,
+  lat?: number,
+  lng?: number,
+  sort?: string
+): Promise<BackendDish[]> {
   if (!q.trim()) return [];
-  return backendGet<BackendDish[]>(`/dishes/search?q=${encodeURIComponent(q.trim())}`);
+  const params = new URLSearchParams({ q: q.trim() });
+  if (lat !== undefined) params.append("lat", String(lat));
+  if (lng !== undefined) params.append("lng", String(lng));
+  if (sort) params.append("sort", sort);
+  return backendGet<BackendDish[]>(`/dishes/search?${params.toString()}`);
 }
 
 export async function fetchBackendDishById(id: number): Promise<BackendDish> {

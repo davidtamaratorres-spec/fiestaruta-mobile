@@ -9,7 +9,14 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from "react-native-reanimated";
 
 import { authService } from "../partner/services/AuthService";
 
@@ -19,6 +26,34 @@ export default function SoyScioScreen() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const bounceY = useSharedValue(0);
+  const shimmerOpacity = useSharedValue(0.7);
+
+  useEffect(() => {
+    bounceY.value = withRepeat(
+      withSequence(
+        withTiming(-12, { duration: 500 }),
+        withTiming(0, { duration: 500 })
+      ),
+      -1
+    );
+    shimmerOpacity.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 1000 }),
+        withTiming(0.7, { duration: 1000 })
+      ),
+      -1
+    );
+  }, []);
+
+  const emojiAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: bounceY.value }],
+  }));
+
+  const shimmerAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: shimmerOpacity.value,
+  }));
 
   async function handleLogin() {
     setError("");
@@ -43,7 +78,9 @@ export default function SoyScioScreen() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <View style={styles.container}>
-        <Text style={styles.logo}>🍽️</Text>
+        <Animated.Text style={[styles.logo, emojiAnimatedStyle]}>
+          🍽️
+        </Animated.Text>
         <Text style={styles.title}>Soy Socio</Text>
         <Text style={styles.subtitle}>Accede al panel de tu restaurante</Text>
 
@@ -67,21 +104,25 @@ export default function SoyScioScreen() {
           onChangeText={setPassword}
         />
 
-        <Pressable
-          style={[styles.btn, loading && styles.btnDisabled]}
-          onPress={handleLogin}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.btnText}>Entrar</Text>
-          )}
-        </Pressable>
+        <Animated.View style={shimmerAnimatedStyle}>
+          <Pressable
+            style={[styles.btn, loading && styles.btnDisabled]}
+            onPress={handleLogin}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.btnText}>Entrar</Text>
+            )}
+          </Pressable>
+        </Animated.View>
 
-        <Pressable onPress={() => router.push("/partner/auth")}>
-          <Text style={styles.link}>¿No tienes cuenta? Regístrate aquí</Text>
-        </Pressable>
+        <Animated.View style={shimmerAnimatedStyle}>
+          <Pressable onPress={() => router.push("/partner/auth")}>
+            <Text style={styles.link}>¿No tienes cuenta? Regístrate aquí</Text>
+          </Pressable>
+        </Animated.View>
       </View>
     </KeyboardAvoidingView>
   );

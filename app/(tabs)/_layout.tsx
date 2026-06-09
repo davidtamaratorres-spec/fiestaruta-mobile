@@ -10,12 +10,16 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: "#E8521A",
-        tabBarInactiveTintColor: "#999",
-        tabBarStyle: { backgroundColor: "#FFF8F0" },
-        headerStyle: { backgroundColor: "#E8521A" },
+        tabBarInactiveTintColor: "#666",
+        tabBarStyle: {
+          backgroundColor: "#111111",
+          borderTopColor: "#222222",
+          borderTopWidth: 1,
+        },
+        headerStyle: { backgroundColor: "#0D0D0D" },
         headerTintColor: "#fff",
         headerTitleStyle: { fontWeight: "700" },
-        headerShown: true,
+        headerShown: false,
         tabBarButton: HapticTab,
       }}
     >
@@ -23,9 +27,9 @@ export default function TabLayout() {
         name="index"
         options={{
           title: "DishQuest",
-          tabBarLabel: "Inicio",
+          tabBarLabel: "Buscar",
           tabBarIcon: ({ color }) => (
-            <IconSymbol size={28} name="house.fill" color={color} />
+            <IconSymbol size={26} name="magnifyingglass" color={color} />
           ),
         }}
       />
@@ -34,9 +38,9 @@ export default function TabLayout() {
         name="explore"
         options={{
           title: "Soy Socio",
-          tabBarLabel: "Soy Socio",
+          tabBarLabel: "Socio",
           tabBarIcon: ({ color }) => (
-            <IconSymbol size={28} name="person.fill" color={color} />
+            <IconSymbol size={26} name="person.fill" color={color} />
           ),
         }}
       />

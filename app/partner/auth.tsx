@@ -22,6 +22,7 @@ export default function PartnerAuthScreen() {
   const [password, setPassword] = useState("");
   const [nombreRestaurante, setNombreRestaurante] = useState("");
   const [ciudad, setCiudad] = useState("");
+  const [direccion, setDireccion] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
 
   async function handleSubmit() {
@@ -35,7 +36,7 @@ export default function PartnerAuthScreen() {
 
     try {
       if (mode === "register") {
-        if (!nombreRestaurante.trim() || !ciudad.trim() || !whatsapp.trim()) {
+        if (!nombreRestaurante.trim() || !ciudad.trim() || !direccion.trim() || !whatsapp.trim()) {
           Alert.alert("Datos incompletos", "Completa todos los campos del restaurante.");
           return;
         }
@@ -45,6 +46,7 @@ export default function PartnerAuthScreen() {
           cleanPassword,
           nombreRestaurante.trim(),
           ciudad.trim(),
+          direccion.trim(),
           whatsapp.trim()
         );
 
@@ -105,6 +107,12 @@ export default function PartnerAuthScreen() {
                 placeholder="Ciudad"
                 value={ciudad}
                 onChangeText={setCiudad}
+                style={styles.input}
+              />
+              <TextInput
+                placeholder="Dirección del restaurante (obligatorio)"
+                value={direccion}
+                onChangeText={setDireccion}
                 style={styles.input}
               />
               <TextInput
