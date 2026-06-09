@@ -12,7 +12,7 @@ import {
   View,
 } from "react-native";
 
-import { backendGet } from "../services/backendApi";
+import { BASE_URL, backendGet } from "../services/backendApi";
 
 type DishDetail = {
   id: number;
@@ -146,7 +146,14 @@ export default function DishDetail() {
         setError(null);
         if (!id || Number.isNaN(idNum)) throw new Error("ID inválido");
         const data = await backendGet<DishDetail>(`/dishes/${idNum}`);
-        if (active) setDish(data);
+        if (active) {
+          setDish(data);
+          fetch(BASE_URL + "/partner/track-view", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ plato_id: idNum }),
+          }).catch(() => {});
+        }
       } catch (e: any) {
         if (active) { setDish(null); setError(e?.message || "Error cargando detalle"); }
       } finally {

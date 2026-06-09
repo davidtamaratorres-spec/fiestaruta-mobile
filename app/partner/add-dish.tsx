@@ -18,7 +18,7 @@ import {
 } from "react-native";
 import type { ScrollView as ScrollViewType } from "react-native";
 
-import { backendPost } from "../services/backendApi";
+import { BASE_URL, backendPost } from "../services/backendApi";
 import { authService } from "./services/AuthService";
 
 export default function AddDishScreen() {
@@ -124,18 +124,29 @@ export default function AddDishScreen() {
 
     setSaving(true);
     try {
-      await backendPost("/partner/platos", {
+      const newPlato = await backendPost<{ id: number }>("/partner/platos", {
         nombre: name.trim(),
         descripcion: description.trim(),
         precio: precioNum,
         categoria: categoria.trim() || "General",
-        imagen_url: imageUri || "",
+        imagen_url: "",
         disponible: available ? 1 : 0,
         tiene_descuento: tieneDescuento ? 1 : 0,
         porcentaje_descuento: tieneDescuento ? Number(porcentajeDescuento) : 0,
         acepta_domicilio: aceptaDomicilio ? 1 : 0,
         acepta_reserva: aceptaReserva ? 1 : 0,
       });
+
+      if (imageUri && newPlato?.id) {
+        const token = await authService.getToken();
+        const formData = new FormData();
+        formData.append("imagen", { uri: imageUri, type: "image/jpeg", name: "plato.jpg" } as any);
+        await fetch(`${BASE_URL}/partner/platos/${newPlato.id}/imagen`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        }).catch(() => {});
+      }
 
       Alert.alert("Plato guardado", "El plato fue agregado a tu restaurante.", [
         { text: "OK", onPress: () => router.replace("/partner/home") },

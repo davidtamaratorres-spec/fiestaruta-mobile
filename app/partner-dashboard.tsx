@@ -231,6 +231,12 @@ export default function PartnerDashboard() {
           <Text style={styles.secondaryBtnText}>Editar restaurante</Text>
         </Pressable>
         <Pressable
+          style={styles.secondaryBtn}
+          onPress={() => router.push("/partner/analytics")}
+        >
+          <Text style={styles.secondaryBtnText}>Ver analíticas</Text>
+        </Pressable>
+        <Pressable
           style={[styles.aiBtn, aiLoading && styles.btnDisabled]}
           onPress={() => router.push("/partner/menu-ia")}
           disabled={aiLoading}
